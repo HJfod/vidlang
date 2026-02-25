@@ -1,0 +1,10 @@
+[package]
+name = "vidlang"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = "4.5.57"
+strum = "0.28"
+strum_macros = "0.28"
+unicode-xid = "0.2.6"

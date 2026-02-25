@@ -1,0 +1,10 @@
+node_modules/
+dist/
+ast.vid
+ast_debug.txt
+*.compdebug.*
+
+
+# Added by cargo
+
+/target
