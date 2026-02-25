@@ -1,0 +1,49 @@
+
+// Functions declared with `function` may not have a duration and are callable 
+// whenever
+function math_stuff(a: int, b: int) -> int {
+    return log(a) * b;
+}
+
+// Clips are special types of functions which are essentially like constructors 
+// of objects in OOP
+// Every parameter & public variable you declare in a clip is made a property 
+// of the returned Clip object
+clip epic_rectangle(width: float, height: float) {
+    // Property
+    public let size = (width, height);
+
+    // Variable
+    let rect = rectangle(width, height);
+    
+    await rect;
+}
+
+// TODO: should this be a clip or a function?
+clip to<T>(ref target: T, value: T, const time: duration) {
+    let initial = target;
+    target = initial + (value - initial) * (frame / duration);
+    await time;
+}
+
+clip ease(target: Clip, in: bool = true, out: bool = true) {
+    let easeInMultiplier = implEaseInOut(in, out);
+    target(frame: frame * easeInMultiplier);
+}
+
+clip glow(target: Clip) {
+}
+
+clip movie() {
+    let rect = epic_rectangle(5, 5);
+}
+
+function move(target: Clip, x: float, y: float) {
+    target.x = x;
+    target.y = y;
+}
+
+// Clips and functions can have const parameters (for duration purposes)
+function tween(ref value: int, const time: duration) -> const duration {
+
+}

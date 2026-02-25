@@ -1,0 +1,3 @@
+# Remove when new Range API is merged
+[toolchain]
+channel = "nightly"

@@ -1,25 +1,37 @@
-use std::{fs::read_to_string, path::{Path, PathBuf}, range::Range, str::Chars};
+use std::{ffi::OsStr, fs::{self, read_to_string}, path::{Path, PathBuf}, range::Range, str::Chars};
 
-use crate::{ast::tokenizer::{Tokenizer, Tokens}, entities::{messages::Messages, names::Names}};
+use crate::{
+    entities::{messages::{Message, MessageLevel, Messages}, names::Names}, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}
+};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ModId(usize);
 
 pub enum Module {
     File(PathBuf, String),
+    Dir(PathBuf),
     Memory(String, String),
 }
 
 impl Module {
+    pub fn name(&self) -> String {
+        match self {
+            Self::File(p, _) => p.file_stem().unwrap_or(p.as_os_str()).display().to_string(),
+            Self::Dir(p) => p.file_name().unwrap_or(p.as_os_str()).display().to_string(),
+            Self::Memory(name, _) => name.clone(),
+        }
+    }
     pub fn data(&self) -> &str {
         match self {
             Self::File(_, d) => d,
+            Self::Dir(_) => "",
             Self::Memory(_, d) => d,
         }
     }
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::File(p, _) => Some(p),
+            Self::Dir(p) => Some(p),
             Self::Memory(_, _) => None,
         }
     }
@@ -97,18 +109,66 @@ impl Codebase {
             modules: Default::default(),
         }
     }
-    pub fn add_file(&mut self, path: &Path) -> std::io::Result<ModId> {
+    pub fn add_file(&mut self, path: &Path, messages: Messages) -> ModId {
         if let Some((id, _)) = self.modules.iter().enumerate().find(|m| m.1.path() == Some(path)) {
-            return Ok(ModId(id));
+            return ModId(id);
         }
-        self.modules.push(Module::File(path.to_path_buf(), read_to_string(path)?));
-        Ok(ModId(self.modules.len() - 1))
+        let id = ModId(self.modules.len());
+        self.modules.push(Module::File(path.to_path_buf(), match read_to_string(path) {
+            Ok(data) => data,
+            Err(e) => {
+                messages.add(Message::new_error(
+                    format!("unable to read source module {}: {e}", path.display()),
+                    Span(id, (0..1).into())
+                ));
+                String::new()
+            }
+        }));
+        id
     }
     pub fn add_memory(&mut self, name: &str, data: &str) -> ModId {
         // In-memory modules are always unique
         self.modules.push(Module::Memory(name.to_string(), data.to_string()));
         ModId(self.modules.len() - 1)
     }
+    pub fn add_dir(&mut self, dir: &Path, messages: Messages) -> ModId {
+        self.modules.push(Module::Dir(dir.to_path_buf()));
+        let dir_id = ModId(self.modules.len() - 1);
+        match fs::read_dir(dir) {
+            Ok(files) => for file in files {
+                match file {
+                    Ok(f) => {
+                        if f.file_type().is_ok_and(|t| t.is_dir()) {
+                            self.add_dir(&f.path(), messages.clone());
+                        }
+                        else if f.path().extension() == Some(OsStr::new("vid")) {
+                            self.add_file(&f.path(), messages.clone());
+                        }
+                    }
+                    Err(e) => {
+                        messages.add(Message::new(
+                            MessageLevel::Error,
+                            format!("unable to read directory {}: {e}", dir.display()),
+                            None,
+                        ));
+                    }
+                }
+            }
+            Err(e) => {
+                messages.add(Message::new(
+                    MessageLevel::Error,
+                    format!("unable to read directory {}: {e}", dir.display()),
+                    None,
+                ));
+            }
+        }
+        dir_id
+    }
+
+    pub fn all_ids(&self) -> Vec<ModId> {
+        self.modules.iter().enumerate().map(|m| ModId(m.0)).collect()
+    }
+
     pub fn fetch(&self, id: ModId) -> &Module {
         self.modules.get(id.0).expect("Codebase has apparently handed out an invalid ModId")
     }
@@ -118,6 +178,7 @@ impl Codebase {
     pub fn tokenize(&self, id: ModId, names: Names, messages: Messages) -> Tokens {
         Tokens::new(
             Tokenizer::new(&mut self.iter_mod(id), names, messages).collect(),
+            "eof",
             Span(id, (0..1).into())
         )
     }
@@ -129,6 +190,21 @@ pub struct Span(ModId, Range<usize>);
 impl Span {
     pub fn next_ch(self) -> Span {
         Span(self.0, (self.1.end..(self.1.end + 1)).into())
+    }
+    pub fn id(self) -> ModId {
+        self.0
+    }
+    pub fn range(self) -> Range<usize> {
+        self.1
+    }
+    pub fn start(self) -> usize {
+        self.1.start
+    }
+    pub fn end(self) -> usize {
+        self.1.end
+    }
+    pub fn extend_from(self, start: usize) -> Span {
+        Span(self.0, (start..self.1.end).into())
     }
 }
 

@@ -1,11 +1,11 @@
+
 use std::str::FromStr;
 
-use crate::{ast::token::{BracketType, StrLitComp, Symbol, Token}, entities::{
+use crate::{tokens::token::{BracketType, StrLitComp, Symbol, Token}, entities::{
     messages::{Message, Messages},
     names::{MISSING_NAME, Names},
-    src::{Span, SrcIterator}
-}};
-use concat_idents::concat_idents;
+    src::SrcIterator
+}, tokens::tokenstream::Tokens};
 use unicode_xid::UnicodeXID;
 
 pub struct Tokenizer<'s> {
@@ -81,7 +81,7 @@ impl<'s> Iterator for Tokenizer<'s> {
                         };
                         tokens.push(tk);
                     }
-                    comps.push(StrLitComp::Component(Tokens::new(tokens, tokens_start)))
+                    comps.push(StrLitComp::Component(Tokens::new(tokens, "closing brace", tokens_start)))
                 }
                 // Otherwise push the char (or escaped char)
                 else {
@@ -191,7 +191,9 @@ impl<'s> Iterator for Tokenizer<'s> {
                 contents.push(tk);
             }
             return Some(Token::Bracketed(
-                ty, Box::from(Tokens::new(contents, contents_start)), self.iter.span_from(start)
+                ty,
+                Box::from(Tokens::new(contents, format!("'{}'", ty.close()), contents_start)),
+                self.iter.span_from(start)
             ));
         }
 
@@ -252,97 +254,6 @@ impl<'s> Iterator for Tokenizer<'s> {
                 ));
                 self.next()
             }
-        }
-    }
-}
-
-// Realistically most of our file is already in one big Vec<Token> anyway because 
-// of brackets containing subtrees so might as well make it all a big Vec<Token>
-#[derive(Debug)]
-pub struct Tokens {
-    iter: std::vec::IntoIter<Token>,
-    peeked: Option<Token>,
-    last_span: Span,
-}
-
-impl Tokens {
-    pub fn new(tks: Vec<Token>, first_span: Span) -> Self {
-        let mut iter = tks.into_iter();
-        Self {
-            peeked: iter.next(),
-            iter,
-            last_span: first_span,
-        }
-    }
-    pub fn peek(&self) -> Option<&Token> {
-        self.peeked.as_ref()
-    }
-    pub fn expect_empty(&self, messages: Messages) {
-        if let Some(ref p) = self.peeked {
-            messages.add(Message::expected("eof", p.expected_name(), p.span()));
-        }
-    }
-}
-
-macro_rules! impl_tokens_expect {
-    ($name: ident, $variant: ident, $default_val: expr) => {
-        impl_tokens_expect!(
-            $name,
-            Token::$variant(_, _),
-            |span| Token::$variant($default_val, span)
-        );
-    };
-    ($name: ident, $pat: pat, $default_pat: expr) => {
-        concat_idents!(__peek_name = peek_, $name {
-            impl Tokens {
-                pub fn __peek_name(&self) -> bool {
-                    matches!(self.peeked, Some($pat))
-                }
-            }
-        });
-        concat_idents!(__expect_name = expect_, $name {
-            impl Tokens {
-                pub fn __expect_name(&mut self, messages: Messages) -> Token {
-                    match self.next() {
-                        Some(tk @ Token::Int(_, _)) => tk,
-                        Some(wrong_tk) => {
-                            let span = wrong_tk.span();
-                            let right_tk = ($default_pat)(span);
-                            messages.add(Message::expected(
-                                right_tk.expected_name(), wrong_tk.expected_name(), span
-                            ));
-                            right_tk
-                        }
-                        None => {
-                            let span = self.last_span;
-                            let right_tk = ($default_pat)(span);
-                            messages.add(Message::expected(
-                                right_tk.expected_name(), "eof", span
-                            ));
-                            right_tk
-                        }
-                    }
-                }
-            }
-        });
-    };
-}
-
-impl_tokens_expect!(int, Int, 0);
-impl_tokens_expect!(float, Float, 0.0);
-impl_tokens_expect!(str, String, vec![]);
-impl_tokens_expect!(ident, Ident, MISSING_NAME);
-impl_tokens_expect!(attr, Token::Attribute(_, _, _), |span| Token::Attribute(MISSING_NAME, None, span));
-
-impl Iterator for Tokens {
-    type Item = Token;
-    fn next(&mut self) -> Option<Self::Item> {
-        match std::mem::replace(&mut self.peeked, self.iter.next()) {
-            Some(tk) => {
-                self.last_span = tk.span().next_ch();
-                Some(tk)
-            }
-            None => None,
         }
     }
 }

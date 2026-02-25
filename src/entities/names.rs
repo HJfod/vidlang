@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NameId(usize);
 
 pub static MISSING_NAME: NameId = NameId(0);

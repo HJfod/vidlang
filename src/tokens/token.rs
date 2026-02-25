@@ -1,9 +1,8 @@
-use std::str::FromStr;
 
-use crate::{ast::tokenizer::Tokens, entities::{
+use crate::{entities::{
     names::NameId,
     src::Span
-}};
+}, tokens::tokenstream::Tokens};
 
 #[derive(Debug, Clone, Copy)]
 pub enum BracketType {
@@ -41,8 +40,8 @@ impl BracketType {
     }
 }
 
-#[derive(Debug, strum_macros::Display, strum_macros::EnumString, PartialEq, Eq)]
-#[strum(serialize_all="lowercase")]
+#[derive(Debug, Clone, Copy, strum_macros::Display, strum_macros::EnumString, PartialEq, Eq)]
+#[strum(serialize_all="snake_case")]
 pub enum Symbol {
     // Keywords
     Let, Const, Type, Function,
@@ -56,6 +55,8 @@ pub enum Symbol {
     SubAssign,
     #[strum(to_string="==")]
     Eq,
+    #[strum(to_string=":")]
+    Colon,
     #[strum(to_string=".")]
     Dot,
     #[strum(to_string="...")]
@@ -110,6 +111,8 @@ impl Token {
 
 #[test]
 fn test_symbols() {
+    use std::str::FromStr;
+
     assert_eq!(Symbol::from_str("+="), Ok(Symbol::SumAssign));
     assert_eq!(Symbol::from_str("let"), Ok(Symbol::Let));
     assert!(Symbol::from_str("++=").is_err());

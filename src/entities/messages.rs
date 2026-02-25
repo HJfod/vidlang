@@ -1,6 +1,6 @@
 use std::{fmt::Display, sync::{Arc, Mutex}};
 
-use crate::entities::src::Span;
+use crate::entities::src::{Codebase, Span};
 
 #[derive(Debug)]
 pub enum NoteLevel {
@@ -25,7 +25,7 @@ pub enum MessageLevel {
 pub struct Message {
     level: MessageLevel,
     text: String,
-    span: Span,
+    span: Option<Span>,
     notes: Vec<Note>,
 }
 
@@ -37,11 +37,19 @@ impl Message {
         Self::new_error(format!("expected {what}"), span)
     }
 
+    pub fn new<S: Display>(level: MessageLevel, msg: S, span: Option<Span>) -> Self {
+        Self {
+            level,
+            text: msg.to_string(),
+            span,
+            notes: Vec::new()
+        }
+    }
     pub fn new_error<S: Display>(msg: S, span: Span) -> Self {
         Self {
             level: MessageLevel::Error,
             text: msg.to_string(),
-            span,
+            span: span.into(),
             notes: Vec::new()
         }
     }
@@ -49,7 +57,7 @@ impl Message {
         Self {
             level: MessageLevel::Warning,
             text: msg.to_string(),
-            span,
+            span: span.into(),
             notes: Vec::new()
         }
     }
@@ -78,7 +86,34 @@ impl Messages {
         let mut m = self.messages.lock().unwrap();
         m.push(msg);
     }
+    pub fn counts(&self) -> (usize, usize) {
+        let m = self.messages.lock().unwrap();
+        let mut errors = 0;
+        let mut warnings = 0;
+        for msg in m.iter() {
+            match msg.level {
+                MessageLevel::Error => errors += 1,
+                MessageLevel::Warning => warnings += 1,
+            }
+        }
+        (errors, warnings)
+    }
     pub fn count_total(&self) -> usize {
         self.messages.lock().unwrap().len()
+    }
+    pub fn release<F: Fn(&str)>(&self, codebase: &Codebase, releaser: F) {
+        let m = self.messages.lock().unwrap();
+        for msg in m.iter() {
+            let mut formatted = String::new();
+            if let Some(span) = msg.span {
+                formatted.push_str(&format!(
+                    "[{}:{}..{}] ",
+                    codebase.fetch(span.id()).name(),
+                    span.start(), span.end(),
+                ));
+            }
+            formatted.push_str(&msg.text);
+            releaser(&formatted);
+        }
     }
 }
