@@ -1,6 +1,6 @@
 use std::{fs::read_to_string, path::{Path, PathBuf}, range::Range, str::Chars};
 
-use crate::{ast::token::{Tokenizer, Tokens}, entities::{messages::Messages, names::Names}};
+use crate::{ast::tokenizer::{Tokenizer, Tokens}, entities::{messages::Messages, names::Names}};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ModId(usize);
@@ -19,7 +19,7 @@ impl Module {
     }
     pub fn path(&self) -> Option<&Path> {
         match self {
-            Self::File(p, _) => Some(&p),
+            Self::File(p, _) => Some(p),
             Self::Memory(_, _) => None,
         }
     }
@@ -34,15 +34,8 @@ pub struct SrcIterator<'s> {
     // We need three characters of lookahead for distinguishing doc comments 
     // '///' from normal comments '//'
     peek: [Option<char>; SRC_ITERATOR_PEEK_WINDOW],
-}
-
-impl<'s> Iterator for SrcIterator<'s> {
-    type Item = char;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.index += 1;
-        self.peek.rotate_left(1);
-        std::mem::replace(&mut self.peek[SRC_ITERATOR_PEEK_WINDOW - 1], self.inner.next())
-    }
+    // This is for better errors
+    last_nonspace_index: usize,
 }
 
 impl<'s> SrcIterator<'s> {
@@ -51,6 +44,7 @@ impl<'s> SrcIterator<'s> {
             id,
             peek: std::array::from_fn(|_| chars.next()),
             index: 0,
+            last_nonspace_index: 0,
             inner: chars,
         }
     }
@@ -71,12 +65,25 @@ impl<'s> SrcIterator<'s> {
         self.index
     }
     pub fn head(&self) -> Span {
-        // EOF is last character, otherwise return next character
-        let start = if self.peek().is_none() { self.index - 1 } else { self.index };
-        Span(self.id, (start..(start + 1)).into())
+        Span(self.id, (self.last_nonspace_index..(self.last_nonspace_index + 1)).into())
     }
     pub fn span_from(&self, start: usize) -> Span {
         Span(self.id, (start..self.index).into())
+    }
+}
+
+impl<'s> Iterator for SrcIterator<'s> {
+    type Item = char;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.peek.rotate_left(1);
+        let ret = std::mem::replace(&mut self.peek[SRC_ITERATOR_PEEK_WINDOW - 1], self.inner.next());
+        if let Some(c) = ret {
+            self.index += 1;
+            if !c.is_whitespace() {
+                self.last_nonspace_index = self.index;
+            }
+        }
+        ret
     }
 }
 
@@ -109,12 +116,21 @@ impl Codebase {
         SrcIterator::new(id, self.fetch(id).data().chars())
     }
     pub fn tokenize(&self, id: ModId, names: Names, messages: Messages) -> Tokens {
-        Tokens::new(Tokenizer::new(&mut self.iter_mod(id), names, messages).collect())
+        Tokens::new(
+            Tokenizer::new(&mut self.iter_mod(id), names, messages).collect(),
+            Span(id, (0..1).into())
+        )
     }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Span(ModId, Range<usize>);
+
+impl Span {
+    pub fn next_ch(self) -> Span {
+        Span(self.0, (self.1.end..(self.1.end + 1)).into())
+    }
+}
 
 #[test]
 fn test_src_iter() {

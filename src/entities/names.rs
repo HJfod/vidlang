@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct NameId(usize);
 
+pub static MISSING_NAME: NameId = NameId(0);
+
 #[derive(Debug, Clone)]
 pub struct Names {
     names: Arc<Mutex<Vec<String>>>,
@@ -11,7 +13,8 @@ pub struct Names {
 impl Names {
     pub fn new() -> Self {
         Self {
-            names: Default::default(),
+            // First name is always MISSING_NAME
+            names: Arc::from(Mutex::new(vec!["<missing name>".into()]))
         }
     }
     pub fn add(&self, name: &str) -> NameId {
