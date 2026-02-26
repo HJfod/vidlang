@@ -1,39 +1,74 @@
 use std::{ffi::OsStr, fs::{self, read_to_string}, path::{Path, PathBuf}, range::Range, str::Chars};
 
 use crate::{
-    entities::{messages::{Message, MessageLevel, Messages}, names::Names}, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}
+    ast::expr::Ast, entities::{messages::{Message, MessageLevel, Messages}, names::Names}, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}
 };
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ModId(usize);
 
-pub enum Module {
+enum ModuleSrc {
     File(PathBuf, String),
     Dir(PathBuf),
-    Memory(String, String),
+    Memory {
+        name: String,
+        data: String,
+    }
+}
+
+pub struct Module {
+    id: ModId,
+    src: ModuleSrc,
+    ast: Option<Ast>,
 }
 
 impl Module {
+    fn new(id: ModId, src: ModuleSrc) -> Self {
+        Self { id, src, ast: None }
+    }
     pub fn name(&self) -> String {
-        match self {
-            Self::File(p, _) => p.file_stem().unwrap_or(p.as_os_str()).display().to_string(),
-            Self::Dir(p) => p.file_name().unwrap_or(p.as_os_str()).display().to_string(),
-            Self::Memory(name, _) => name.clone(),
+        match &self.src {
+            ModuleSrc::File(p, _) => p.file_stem().unwrap_or(p.as_os_str()).display().to_string(),
+            ModuleSrc::Dir(p) => p.file_name().unwrap_or(p.as_os_str()).display().to_string(),
+            ModuleSrc::Memory { name, data: _ } => name.clone(),
         }
     }
-    pub fn data(&self) -> &str {
-        match self {
-            Self::File(_, d) => d,
-            Self::Dir(_) => "",
-            Self::Memory(_, d) => d,
+    pub fn data(&self) -> Option<&str> {
+        match &self.src {
+            ModuleSrc::File(_, data) => Some(data),
+            ModuleSrc::Dir(_) => None,
+            ModuleSrc::Memory { name: _, data } => Some(data),
         }
     }
     pub fn path(&self) -> Option<&Path> {
-        match self {
-            Self::File(p, _) => Some(p),
-            Self::Dir(p) => Some(p),
-            Self::Memory(_, _) => None,
+        match &self.src {
+            ModuleSrc::File(p, _) => Some(p),
+            ModuleSrc::Dir(p) => Some(p),
+            ModuleSrc::Memory { name: _, data: _ } => None,
         }
+    }
+    pub fn ast(&self) -> Option<&Ast> {
+        self.ast.as_ref()
+    }
+    pub fn create_iter(&self) -> Option<SrcIterator<'_>> {
+        Some(SrcIterator::new(self.id, self.data()?.chars()))
+    }
+    pub fn tokenize(&self, names: Names, messages: Messages) -> Option<Tokens> {
+        Some(Tokens::new(
+            Tokenizer::new(&mut self.create_iter()?, names.clone(), messages.clone()).collect(),
+            "eof",
+            Span(self.id, (0..1).into()),
+            names,
+            messages
+        ))
+    }
+    pub fn parse(&mut self, names: Names, messages: Messages) -> Option<&Ast> {
+        if self.ast.is_some() {
+            return self.ast.as_ref();
+        }
+        let mut tokens = self.tokenize(names, messages.clone())?;
+        self.ast = Some(Ast::parse(&mut tokens));
+        self.ast.as_ref()
     }
 }
 
@@ -114,26 +149,36 @@ impl Codebase {
             return ModId(id);
         }
         let id = ModId(self.modules.len());
-        self.modules.push(Module::File(path.to_path_buf(), match read_to_string(path) {
-            Ok(data) => data,
-            Err(e) => {
-                messages.add(Message::new_error(
-                    format!("unable to read source module {}: {e}", path.display()),
-                    Span(id, (0..1).into())
-                ));
-                String::new()
-            }
-        }));
+        self.modules.push(Module::new(
+            id,
+            ModuleSrc::File(
+                path.to_path_buf(),
+                match read_to_string(path) {
+                    Ok(data) => data,
+                    Err(e) => {
+                        messages.add(Message::new_error(
+                            format!("unable to read source module {}: {e}", path.display()),
+                            Span(id, (0..1).into())
+                        ));
+                        String::new()
+                    }
+                }
+            )
+        ));
         id
     }
     pub fn add_memory(&mut self, name: &str, data: &str) -> ModId {
         // In-memory modules are always unique
-        self.modules.push(Module::Memory(name.to_string(), data.to_string()));
-        ModId(self.modules.len() - 1)
+        let id = ModId(self.modules.len());
+        self.modules.push(Module::new(
+            id,
+            ModuleSrc::Memory { name: name.to_string(), data: data.to_string() }
+        ));
+        id
     }
     pub fn add_dir(&mut self, dir: &Path, messages: Messages) -> ModId {
-        self.modules.push(Module::Dir(dir.to_path_buf()));
-        let dir_id = ModId(self.modules.len() - 1);
+        let dir_id = ModId(self.modules.len());
+        self.modules.push(Module::new(dir_id, ModuleSrc::Dir(dir.to_path_buf())));
         match fs::read_dir(dir) {
             Ok(files) => for file in files {
                 match file {
@@ -172,15 +217,10 @@ impl Codebase {
     pub fn fetch(&self, id: ModId) -> &Module {
         self.modules.get(id.0).expect("Codebase has apparently handed out an invalid ModId")
     }
-    pub fn iter_mod(&self, id: ModId) -> SrcIterator<'_> {
-        SrcIterator::new(id, self.fetch(id).data().chars())
-    }
-    pub fn tokenize(&self, id: ModId, names: Names, messages: Messages) -> Tokens {
-        Tokens::new(
-            Tokenizer::new(&mut self.iter_mod(id), names, messages).collect(),
-            "eof",
-            Span(id, (0..1).into())
-        )
+    pub fn parse_all(&mut self, names: Names, messages: Messages) {
+        for module in &mut self.modules {
+            module.parse(names.clone(), messages.clone());
+        }
     }
 }
 
@@ -212,7 +252,7 @@ impl Span {
 fn test_src_iter() {
     let mut codebase = Codebase::new();
     let id = codebase.add_memory("test_src_iter", "abcdefg");
-    let mut iter = codebase.iter_mod(id);
+    let mut iter = codebase.fetch(id).create_iter().unwrap();
     for ch in 'a'..='g' {
         assert_eq!(iter.peek(), Some(ch));
         assert_eq!(iter.next(), Some(ch));

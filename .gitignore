@@ -4,6 +4,7 @@ ast.vid
 ast_debug.txt
 *.compdebug.*
 .expand
+.vscode/
 
 # Added by cargo
 

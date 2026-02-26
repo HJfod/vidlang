@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::{entities::{messages::{Message, Messages}, names::MISSING_NAME, src::Span}, tokens::token::{Symbol, Token}};
+use crate::{entities::{codebase::Span, messages::{Message, Messages}, names::{MISSING_NAME, Names}}, tokens::token::{BracketType, Symbol, Token}};
 use concat_idents::concat_idents;
 
 // Realistically most of our file is already in one big Vec<Token> anyway because 
@@ -11,16 +11,20 @@ pub struct Tokens {
     peeked: Option<Token>,
     last_span: Span,
     eof_name: String,
+    names: Names,
+    messages: Messages,
 }
 
 impl Tokens {
-    pub fn new<S: Display>(tks: Vec<Token>, eof_name: S, first_span: Span) -> Self {
+    pub fn new<S: Display>(tks: Vec<Token>, eof_name: S, first_span: Span, names: Names, messages: Messages) -> Self {
         let mut iter = tks.into_iter();
         Self {
             peeked: iter.next(),
             iter,
             last_span: first_span,
             eof_name: eof_name.to_string(),
+            names,
+            messages,
         }
     }
     pub fn peek(&self) -> Option<&Token> {
@@ -33,13 +37,13 @@ impl Tokens {
             _ => false,
         })
     }
-    pub fn expect_symbol(&mut self, symbol: Symbol, messages: Messages) -> Token {
+    pub fn expect_symbol(&mut self, symbol: Symbol) -> Token {
         let tk = self.next();
         if tk.as_ref().is_none_or(|tk| match tk {
             Token::Symbol(sym, _) => *sym != symbol,
             _ => true,
         }) {
-            messages.add(Message::expected(
+            self.messages.add(Message::expected(
                 format!("'{symbol}'"),
                 tk.as_ref().map(|t| t.expected_name()).unwrap_or(&self.eof_name),
                 tk.as_ref().map(|t| t.span()).unwrap_or(self.last_span)
@@ -47,28 +51,73 @@ impl Tokens {
         }
         tk.unwrap_or(Token::Symbol(symbol, self.last_span))
     }
-    pub fn peek_and_expect_symbol(&mut self, symbol: Symbol, messages: Messages) -> bool {
+    pub fn peek_and_expect_symbol(&mut self, symbol: Symbol) -> bool {
         if self.peek_symbol(symbol) {
-            self.expect_symbol(symbol, messages);
+            self.next();
             return true;
         }
         false
     }
+    pub fn peek_and_expect_symbol_of<F>(&mut self, matches: F) -> Option<(Symbol, Span)>
+        where F: Fn(Symbol) -> bool
+    {
+        if self.peeked.as_ref().is_some_and(|p| match p {
+            Token::Symbol(sym, _) => matches(*sym),
+            _ => false,
+        }) {
+            let Some(Token::Symbol(sym, span)) = self.next() else {
+                unreachable!("peek_and_expect_symbol_of: peeked token did not match parsed one");
+            };
+            return Some((sym, span));
+        }
+        None
+    }
 
-    pub fn expected(&mut self, what: &str, messages: Messages) -> Span {
+    pub fn peek_bracketed(&self, ty: BracketType) -> bool {
+        self.peeked.as_ref().is_some_and(|p| match p {
+            Token::Bracketed(bty, _, _) => *bty == ty,
+            _ => false,
+        })
+    }
+    pub fn expect_bracketed(&mut self, ty: BracketType) -> Token {
+        let tk = self.next();
+        if tk.as_ref().is_none_or(|tk| match tk {
+            Token::Bracketed(bty, _, _) => *bty != ty,
+            _ => true,
+        }) {
+            self.messages.add(Message::expected(
+                ty.expected_name(),
+                tk.as_ref().map(|t| t.expected_name()).unwrap_or(&self.eof_name),
+                tk.as_ref().map(|t| t.span()).unwrap_or(self.last_span)
+            ));
+        }
+        tk.unwrap_or_else(|| Token::Bracketed(
+            ty,
+            Box::from(Tokens::new(
+                vec![],
+                ty.close().to_string(),
+                self.last_span,
+                self.names(),
+                self.messages()
+            )),
+            self.last_span
+        ))
+    }
+
+    pub fn expected(&mut self, what: &str) -> Span {
         // todo: some sort of error recovery? don't parse if there is a separator 
         // (comma or semicolon) here?
         let (name, span) = match self.next() {
             Some(invalid) => (invalid.expected_name(), invalid.span()),
             None => (self.eof_name(), self.last_span()),
         };
-        messages.add(Message::expected(what, name, span));
+        self.messages.add(Message::expected(what, name, span));
         span
     }
 
-    pub fn expect_empty(&self, messages: Messages) {
+    pub fn expect_empty(&self) {
         if let Some(ref p) = self.peeked {
-            messages.add(Message::expected(&self.eof_name, p.expected_name(), p.span()));
+            self.messages.add(Message::expected(&self.eof_name, p.expected_name(), p.span()));
         }
     }
 
@@ -83,6 +132,12 @@ impl Tokens {
     }
     pub fn eof_name(&self) -> &str {
         &self.eof_name
+    }
+    pub fn names(&self) -> Names {
+        self.names.clone()
+    }
+    pub fn messages(&self) -> Messages {
+        self.messages.clone()
     }
 }
 
@@ -104,13 +159,13 @@ macro_rules! impl_tokens_expect {
         });
         concat_idents!(__expect_name = expect_, $name {
             impl Tokens {
-                pub fn __expect_name(&mut self, messages: Messages) -> Token {
+                pub fn __expect_name(&mut self) -> Token {
                     match self.next() {
                         Some(tk @ Token::Int(_, _)) => tk,
                         Some(wrong_tk) => {
                             let span = wrong_tk.span();
                             let right_tk = ($default_pat)(span);
-                            messages.add(Message::expected(
+                            self.messages.add(Message::expected(
                                 right_tk.expected_name(), wrong_tk.expected_name(), span
                             ));
                             right_tk
@@ -118,7 +173,7 @@ macro_rules! impl_tokens_expect {
                         None => {
                             let span = self.last_span;
                             let right_tk = ($default_pat)(span);
-                            messages.add(Message::expected(
+                            self.messages.add(Message::expected(
                                 right_tk.expected_name(), "eof", span
                             ));
                             right_tk

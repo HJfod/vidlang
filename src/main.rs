@@ -1,7 +1,7 @@
 #![feature(new_range_api)]
 
 use clap::Parser;
-use crate::{ast::expr::ASTs, entities::{messages::Messages, names::Names, src::Codebase}};
+use crate::{entities::{messages::Messages, names::Names, codebase::Codebase}};
 
 mod ast;
 mod entities;
@@ -19,7 +19,7 @@ fn main() {
     codebase.add_dir(&dir, messages.clone());
 
     let names = Names::new();
-    let asts = ASTs::parse_all(&codebase, names.clone(), messages.clone());
+    codebase.parse_all(names.clone(), messages.clone());
 
     messages.release(&codebase, |msg| println!("{}", msg));
     let (errors, warnings) = messages.counts();

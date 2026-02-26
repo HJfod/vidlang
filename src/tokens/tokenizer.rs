@@ -1,11 +1,9 @@
 
 use std::str::FromStr;
 
-use crate::{tokens::token::{BracketType, StrLitComp, Symbol, Token}, entities::{
-    messages::{Message, Messages},
-    names::{MISSING_NAME, Names},
-    src::SrcIterator
-}, tokens::tokenstream::Tokens};
+use crate::{entities::{
+    codebase::SrcIterator, messages::{Message, Messages}, names::{MISSING_NAME, Names}
+}, tokens::{token::{BracketType, StrLitComp, Symbol, Token}, tokenstream::Tokens}};
 use unicode_xid::UnicodeXID;
 
 pub struct Tokenizer<'s> {
@@ -46,6 +44,14 @@ impl<'s> Iterator for Tokenizer<'s> {
         let start = self.iter.index();
         let c = self.iter.next()?;
 
+        // todo: Doc comments
+        // if c == '/' && self.iter.peek_n(1) == Some('/') && self.iter.peek_n(2) == Some('/') {
+        //     // Consume the other ones
+        //     self.iter.next();
+        //     self.iter.next();
+
+        // }
+
         // String literals
         if c == '"' {
             let mut comps = Vec::new();
@@ -81,7 +87,9 @@ impl<'s> Iterator for Tokenizer<'s> {
                         };
                         tokens.push(tk);
                     }
-                    comps.push(StrLitComp::Component(Tokens::new(tokens, "closing brace", tokens_start)))
+                    comps.push(StrLitComp::Component(Tokens::new(
+                        tokens, "closing brace", tokens_start, self.names.clone(), self.messages.clone()
+                    )))
                 }
                 // Otherwise push the char (or escaped char)
                 else {
@@ -192,7 +200,9 @@ impl<'s> Iterator for Tokenizer<'s> {
             }
             return Some(Token::Bracketed(
                 ty,
-                Box::from(Tokens::new(contents, format!("'{}'", ty.close()), contents_start)),
+                Box::from(Tokens::new(
+                    contents, format!("'{}'", ty.close()), contents_start, self.names.clone(), self.messages.clone()
+                )),
                 self.iter.span_from(start)
             ));
         }
@@ -260,19 +270,19 @@ impl<'s> Iterator for Tokenizer<'s> {
 
 #[test]
 fn test_tokenizer() {
-    use crate::entities::src::Codebase;
+    use crate::entities::codebase::Codebase;
     let names = Names::new();
     let messages = Messages::new();
     let mut codebase = Codebase::new();
     let id = codebase.add_memory("test_tokenizer", r#"
         let x += 5;
     "#);
-    let tokens = codebase.tokenize(id, names, messages.clone()).collect::<Vec<_>>();
+    let tokens = codebase.fetch(id).tokenize(names, messages.clone()).unwrap().collect::<Vec<_>>();
     assert!(messages.count_total() == 0, "{messages:?}");
     assert_eq!(tokens.len(), 5);
     assert!(matches!(tokens[0], Token::Symbol(Symbol::Let, _)));
     assert!(matches!(tokens[1], Token::Ident(_, _)));
-    assert!(matches!(tokens[2], Token::Symbol(Symbol::SumAssign, _)));
+    assert!(matches!(tokens[2], Token::Symbol(Symbol::AddAssign, _)));
     assert!(matches!(tokens[3], Token::Int(_, _)));
     assert!(matches!(tokens[4], Token::Symbol(Symbol::Semicolon, _)));
 }

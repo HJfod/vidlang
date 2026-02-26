@@ -1,10 +1,10 @@
 
 use crate::{entities::{
     names::NameId,
-    src::Span
+    codebase::Span
 }, tokens::tokenstream::Tokens};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BracketType {
     Parentheses,
     Brackets,
@@ -38,23 +38,62 @@ impl BracketType {
             BracketType::AngleBrackets => '>',
         }
     }
+    pub fn expected_name(&self) -> &'static str {
+        match self {
+            BracketType::Parentheses => "parenthesized expression",
+            BracketType::Brackets => "bracketed expression",
+            BracketType::Braces => "braced expression",
+            BracketType::AngleBrackets => "angle-bracketed expression",
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, strum_macros::Display, strum_macros::EnumString, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, strum_macros::Display, strum_macros::EnumString, PartialEq)]
 #[strum(serialize_all="snake_case")]
 pub enum Symbol {
     // Keywords
-    Let, Const, Type, Function,
-    Trait, Impl, Struct, Clip,
+    Let, Const, Type, Function, Clip,
+    Await,
+    Trait, Impl, Struct,
+    If, Then, Else, While, For, In, Loop,
+    And, Or,
     // Operators
     #[strum(to_string="=")]
     Assign,
+    #[strum(to_string=":=")]
+    WalrusAssign,
     #[strum(to_string="+=")]
-    SumAssign,
+    AddAssign,
     #[strum(to_string="-=")]
     SubAssign,
+    #[strum(to_string="**")]
+    Power,
+    #[strum(to_string="*")]
+    Mul,
+    #[strum(to_string="/")]
+    Div,
+    #[strum(to_string="mod")]
+    Mod,
+    #[strum(to_string="+")]
+    Plus,
+    #[strum(to_string="-")]
+    Minus,
     #[strum(to_string="==")]
     Eq,
+    #[strum(to_string="!=")]
+    Neq,
+    #[strum(to_string="<")]
+    Less,
+    #[strum(to_string="<=")]
+    Leq,
+    #[strum(to_string=">")]
+    More,
+    #[strum(to_string=">=")]
+    Meq,
+    #[strum(to_string="->")]
+    Arrow,
+    #[strum(to_string="=>")]
+    FatArrow,
     #[strum(to_string=":")]
     Colon,
     #[strum(to_string=".")]
@@ -113,7 +152,11 @@ impl Token {
 fn test_symbols() {
     use std::str::FromStr;
 
-    assert_eq!(Symbol::from_str("+="), Ok(Symbol::SumAssign));
+    assert_eq!(Symbol::from_str("+="), Ok(Symbol::AddAssign));
     assert_eq!(Symbol::from_str("let"), Ok(Symbol::Let));
+    assert_eq!(Symbol::from_str("->"), Ok(Symbol::Arrow));
+    assert_eq!(Symbol::from_str("=>"), Ok(Symbol::FatArrow));
     assert!(Symbol::from_str("++=").is_err());
+    assert!(Symbol::from_str("=<").is_err());
+    assert!(Symbol::from_str("-->").is_err());
 }

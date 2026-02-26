@@ -1,3 +1,3 @@
 pub mod names;
-pub mod src;
+pub mod codebase;
 pub mod messages;
