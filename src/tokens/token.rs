@@ -9,7 +9,6 @@ pub enum BracketType {
     Parentheses,
     Brackets,
     Braces,
-    AngleBrackets,
 }
 
 impl BracketType {
@@ -18,7 +17,6 @@ impl BracketType {
             '(' => Some(BracketType::Parentheses),
             '[' => Some(BracketType::Brackets),
             '{' => Some(BracketType::Braces),
-            '<' => Some(BracketType::AngleBrackets),
             _   => None,
         }
     }
@@ -27,7 +25,6 @@ impl BracketType {
             BracketType::Parentheses   => '(',
             BracketType::Brackets      => '[',
             BracketType::Braces        => '{',
-            BracketType::AngleBrackets => '<',
         }
     }
     pub fn close(&self) -> char {
@@ -35,7 +32,6 @@ impl BracketType {
             BracketType::Parentheses   => ')',
             BracketType::Brackets      => ']',
             BracketType::Braces        => '}',
-            BracketType::AngleBrackets => '>',
         }
     }
     pub fn expected_name(&self) -> &'static str {
@@ -43,7 +39,6 @@ impl BracketType {
             BracketType::Parentheses => "parenthesized expression",
             BracketType::Brackets => "bracketed expression",
             BracketType::Braces => "braced expression",
-            BracketType::AngleBrackets => "angle-bracketed expression",
         }
     }
 }

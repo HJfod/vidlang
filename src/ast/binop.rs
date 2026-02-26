@@ -200,6 +200,8 @@ impl Expr {
 
         let mut found_one = false;
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(is_eq_sym) {
+            let rhs = Expr::parse_binop_sum(tokens, args);
+
             // We're only allowing one equality / comparison operator per binop 
             // (since `a == b > c` is honestly at best ambiguous and at worst 
             // hard-to-spot unintentional bug)
@@ -212,7 +214,6 @@ impl Expr {
             }
             else {
                 found_one = true;
-                let rhs = Expr::parse_binop_sum(tokens, args);
                 let func_name = tokens.names().builtin_binop_name(op);
                 lhs = Expr::Call {
                     target: Box::from(Expr::Ident(Ident(func_name, span))),
@@ -224,7 +225,7 @@ impl Expr {
         }
         lhs
     }
-    /// Lowest precedence binary operators: logic chains (`a and b and c` etc.)
+    /// Second lowest precedence binary operators: logic chains (`a and b and c` etc.)
     fn parse_logic_chain(tokens: &mut Tokens, args: ParseArgs) -> Self {
         let start = tokens.start();
         let first = Expr::parse_binop_eq(tokens, args);
@@ -261,24 +262,24 @@ impl Expr {
         let start = tokens.start();
         let mut lhs = Expr::parse_logic_chain(tokens, args);
         let is_ass_sym = |sym| matches!(sym, Symbol::Assign | Symbol::AddAssign | Symbol::SubAssign);
+
+        let mut found_one = false;
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(is_ass_sym) {
             let rhs = Expr::parse_logic_chain(tokens, args);
-            // Assignment is right-associative
-            if let Expr::Assign { target, value, op, span } = lhs {
-                lhs = Expr::Assign {
-                    target,
-                    value: Box::from(Expr::Assign {
-                        target: value,
-                        value: rhs.into(),
-                        op,
-                        span
-                    }),
-                    op,
-                    span
-                }
+
+            if found_one {
+                tokens.messages().add(
+                    Message::new_error("only one assignment operator may be used at once", span)
+                        .with_hint(
+                            "surround this assignment in parentheses, or \
+                            split the assigments into their own statements",
+                            None
+                        )
+                );
             }
             else {
-               lhs = Expr::Assign {
+                found_one = true;
+                lhs = Expr::Assign {
                     target: lhs.into(),
                     value: rhs.into(),
                     op: (op, span),
@@ -291,6 +292,34 @@ impl Expr {
     pub(super) fn parse_binop(tokens: &mut Tokens, args: ParseArgs) -> Self {
         Self::parse_binop_assign(tokens, args)
     }
+}
+
+#[test]
+fn test_ambiguous_exprs() {
+    use crate::entities::codebase::Codebase;
+    use crate::entities::messages::Messages;
+    use crate::entities::names::Names;
+
+    let test_expr = |data: &str| {
+        let mut codebase = Codebase::new();
+        codebase.add_memory("test_ambiguous_exprs", data);
+
+        let names = Names::new();
+        let messages = Messages::new();
+        codebase.parse_all(names.clone(), messages.clone(), ParseArgs {
+            allow_non_definitions_at_root: true,
+        });
+
+        assert_eq!(
+            messages.counts().0, 1,
+            "`{data}` didn't result in one error:\n{}", messages.to_test_string(&codebase)
+        );
+    };
+
+    test_expr("-2 ** 3");
+    test_expr("a = b = c");
+    test_expr("a == b < c");
+    test_expr("a and b or c");
 }
 
 #[test]
