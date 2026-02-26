@@ -49,12 +49,25 @@ pub enum Expr {
     Ident(Ident),
 
     // `let a: B = 5`
-    VarDef {
+    Var {
         name: Ident,
         ty: Option<TyExpr>,
         value: Option<Box<Expr>>,
-        span: Span,
         is_const: bool,
+        span: Span,
+    },
+    Function {
+        name: Ident,
+        generics: Option<Vec<(Ident, Option<TyExpr>)>>,
+        params: Vec<(Ident, TyExpr, Option<Expr>)>,
+        return_ty: Option<TyExpr>,
+        body: Box<Expr>,
+        span: Span,
+    },
+    ArrowFunction {
+        params: Vec<(Ident, Option<TyExpr>, Option<Expr>)>,
+        body: Box<Expr>,
+        span: Span,
     },
 
     // `a(b, c: 5)`
@@ -108,7 +121,9 @@ impl Expr {
             Self::String(..) => true,
             Self::Ident(..) => true,
 
-            Self::VarDef { .. } => true,
+            Self::Var { .. } => true,
+            Self::Function { body, .. } => body.requires_semicolon(),
+            Self::ArrowFunction { body, .. } => body.requires_semicolon(),
 
             Self::Call { .. } => true,
             Self::FieldAccess { .. } => true,
@@ -130,7 +145,9 @@ impl Expr {
             Expr::Float(_, span) => *span,
             Expr::String(_, span) => *span,
             Expr::Ident(ident) => ident.1,
-            Expr::VarDef { span, .. } => *span,
+            Expr::Var { span, .. } => *span,
+            Expr::Function { span, .. } => *span,
+            Expr::ArrowFunction { span, .. } => *span,
             Expr::Call { span, .. } => *span,
             Expr::FieldAccess { span, .. } => *span,
             Expr::Assign { span, .. } => *span,
@@ -170,7 +187,7 @@ impl Ast {
 }
 
 #[test]
-fn test_parse() {
+fn parse() {
     use crate::entities::codebase::Codebase;
     use crate::entities::names::Names;
     use crate::entities::messages::Messages;
@@ -197,7 +214,7 @@ fn test_parse() {
     assert_eq!(ast_exprs.len(), 2);
 
     assert_eq!(*ast_exprs, vec![
-        Expr::VarDef {
+        Expr::Var {
             name: Ident(names.add("x"), Span::zero(id)),
             ty: None,
             value: Some(Box::from(Expr::Int(8, Span::zero(id)))),

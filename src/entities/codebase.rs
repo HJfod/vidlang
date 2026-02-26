@@ -257,7 +257,7 @@ impl PartialEq for Span {
 }
 
 #[test]
-fn test_src_iter() {
+fn src_iter() {
     let mut codebase = Codebase::new();
     let id = codebase.add_memory("test_src_iter", "abcdefg");
     let mut iter = codebase.fetch(id).create_iter().unwrap();

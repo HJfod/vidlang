@@ -1,6 +1,29 @@
-use crate::{ast::expr::{Expr, ParseArgs, TyExpr}, tokens::{token::Symbol, tokenstream::Tokens}};
+use crate::{ast::expr::{Expr, Ident, ParseArgs, TyExpr}, tokens::{token::Symbol, tokenstream::Tokens}};
 
 impl TyExpr {
+    pub(super) fn try_parse_generic_params(tokens: &mut Tokens, args: ParseArgs)
+        -> Option<Vec<(Ident, Option<TyExpr>)>>
+    {
+        if !tokens.peek_and_expect_symbol(Symbol::Less) {
+            return None;
+        }
+        let mut generics = Vec::new();
+        while tokens.peek().is_some() && !tokens.peek_symbol(Symbol::More) {
+            let name = tokens.expect_ident();
+            let constraint = tokens.peek_and_expect_symbol(Symbol::Colon)
+                .then(|| TyExpr::parse(tokens, args));
+            generics.push((name, constraint));
+            
+            // This allows a trailing comma
+            if tokens.peek_symbol(Symbol::More) {
+                break;
+            }
+            Expr::parse_comma(tokens, args);
+        }
+        // This is separate to check for EOF
+        tokens.expect_symbol(Symbol::More);
+        Some(generics)
+    }
     pub(super) fn try_parse_generic_args(tokens: &mut Tokens, args: ParseArgs) -> Option<Vec<TyExpr>> {
         if !tokens.peek_and_expect_symbol(Symbol::Less) {
             return None;
@@ -42,7 +65,7 @@ impl TyExpr {
 }
 
 #[test]
-fn test_type_parse() {
+fn type_parse() {
     use crate::entities::codebase::Codebase;
     use crate::entities::names::Names;
     use crate::entities::messages::Messages;

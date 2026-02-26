@@ -295,7 +295,7 @@ impl Expr {
 }
 
 #[test]
-fn test_ambiguous_exprs() {
+fn ambiguous_exprs() {
     use crate::entities::codebase::Codebase;
     use crate::entities::messages::Messages;
     use crate::entities::names::Names;
@@ -323,7 +323,7 @@ fn test_ambiguous_exprs() {
 }
 
 #[test]
-fn test_binop() {
+fn binop() {
     use crate::entities::codebase::{Codebase, Span};
     use crate::entities::messages::Messages;
     use crate::entities::names::Names;

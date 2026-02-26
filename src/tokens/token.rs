@@ -150,7 +150,7 @@ impl Token {
 }
 
 #[test]
-fn test_symbols() {
+fn symbols() {
     use std::str::FromStr;
 
     assert_eq!(Symbol::from_str("+="), Ok(Symbol::AddAssign));

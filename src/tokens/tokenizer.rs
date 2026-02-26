@@ -279,7 +279,7 @@ impl<'s> Iterator for Tokenizer<'s> {
 }
 
 #[test]
-fn test_tokenizer() {
+fn tokenizer() {
     use crate::entities::codebase::Codebase;
     let names = Names::new();
     let messages = Messages::new();
