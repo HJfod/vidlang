@@ -91,6 +91,8 @@ pub enum Symbol {
     FatArrow,
     #[strum(to_string=":")]
     Colon,
+    #[strum(to_string="::")]
+    Scope,
     #[strum(to_string=".")]
     Dot,
     #[strum(to_string="...")]

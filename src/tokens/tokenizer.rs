@@ -234,17 +234,27 @@ impl<'s> Iterator for Tokenizer<'s> {
         // Otherwise it must be an operator or an invalid character
         let mut sym = String::from(c);
 
+        let peek = self.iter.peek();
+
         #[allow(clippy::if_same_then_else)]
         // Everything like +=, -=, etc.
-        if "=:+-*/%^~|<>?!".contains(c) && self.iter.peek() == Some('=') {
+        if "=:+-*/%^~|<>?!".contains(c) && peek == Some('=') {
+            sym.push(self.iter.next().unwrap());
+        }
+        // Arrows (=>, ->)
+        else if (c == '=' || c == '-') && peek == Some('>') {
             sym.push(self.iter.next().unwrap());
         }
         // **
-        else if c == '*' && self.iter.peek() == Some('*') {
+        else if c == '*' && peek == Some('*') {
             sym.push(self.iter.next().unwrap());
         }
         // ??
-        else if c == '?' && self.iter.peek() == Some('?') {
+        else if c == '?' && peek == Some('?') {
+            sym.push(self.iter.next().unwrap());
+        }
+        // ::
+        else if c == ':' && peek == Some(':') {
             sym.push(self.iter.next().unwrap());
         }
         // All of the dots

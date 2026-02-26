@@ -29,6 +29,10 @@ impl Expr {
         if tokens.peek_bracketed(BracketType::Brackets) {
             return Some(Self::parse_block(tokens, args));
         }
+        if tokens.peek_and_expect_symbol(Symbol::Await) {
+            let expr = Expr::parse(tokens, args);
+            return Some(Self::Await(Box::from(expr), tokens.span_from(start)));
+        }
 
         None
     }

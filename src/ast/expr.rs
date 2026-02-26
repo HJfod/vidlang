@@ -14,7 +14,18 @@ pub enum StringComp {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum TyExpr {
-    Named(NameId, Span),
+    Named {
+        name: Ident,
+        generics: Option<Vec<TyExpr>>,
+        span: Span,
+    },
+    // `A<B>::C<D>`
+    Access {
+        from: Box<TyExpr>,
+        associate: Ident,
+        generics: Option<Vec<TyExpr>>,
+        span: Span,
+    },
 }
 
 #[derive(Debug)]
@@ -43,6 +54,7 @@ pub enum Expr {
         ty: Option<TyExpr>,
         value: Option<Box<Expr>>,
         span: Span,
+        is_const: bool,
     },
 
     // `a(b, c: 5)`
@@ -82,6 +94,7 @@ pub enum Expr {
     Yield(Box<Expr>, Span),
     // `{ .. }`
     Block(Vec<Expr>, Span),
+    Await(Box<Expr>, Span),
 }
 
 impl Expr {
@@ -108,6 +121,7 @@ impl Expr {
                     .unwrap_or(truthy.requires_semicolon()),
             Self::Yield(value, ..) => value.requires_semicolon(),
             Self::Block(..) => false,
+            Self::Await(value, _) => value.requires_semicolon(),
         }
     }
     pub fn span(&self) -> Span {
@@ -124,6 +138,7 @@ impl Expr {
             Expr::If { span, .. } => *span,
             Expr::Yield(_, span) => *span,
             Expr::Block(_, span) => *span,
+            Expr::Await(_, span) => *span,
         }
     }
 }
@@ -187,6 +202,7 @@ fn test_parse() {
             ty: None,
             value: Some(Box::from(Expr::Int(8, Span::zero(id)))),
             span: Span::zero(id),
+            is_const: false,
         },
         Expr::If {
             clause: Box::from(Expr::Call {

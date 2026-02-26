@@ -10,13 +10,17 @@ impl Expr {
         let start = tokens.start();
 
         // Variable definition
-        if tokens.peek_and_expect_symbol(Symbol::Let) {
+        if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(|sym| matches!(sym, Symbol::Let | Symbol::Const)) {
             let name = tokens.expect_ident();
             let ty = tokens.peek_and_expect_symbol(Symbol::Colon)
-                .then(|| TyExpr::parse(tokens));
+                .then(|| TyExpr::parse(tokens, args));
             let value = tokens.peek_and_expect_symbol(Symbol::Assign)
                 .then(|| Box::from(Expr::parse(tokens, args)));
-            return Some(Expr::VarDef { name, ty, value, span: tokens.span_from(start) })
+            return Some(Expr::VarDef {
+                name, ty, value,
+                span: tokens.span_from(start),
+                is_const: sym == Symbol::Const,
+            });
         }
         
         None

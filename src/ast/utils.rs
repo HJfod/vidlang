@@ -56,6 +56,22 @@ impl Expr {
         }
         exprs
     }
+    pub(super) fn parse_comma(tokens: &mut Tokens, _args: ParseArgs) {
+        // For error recovery reasons, do not consume unless we 
+        // actually got a comma
+        match tokens.peek() {
+            Some(Token::Symbol(Symbol::Comma, _)) => {
+                tokens.next();
+            }
+            tk => {
+                tokens.messages().add(Message::expected(
+                    "comma",
+                    tk.map(|t| t.expected_name()).unwrap_or(tokens.eof_name()),
+                    tk.map(|t| t.span()).unwrap_or(tokens.last_span()),
+                ));
+            }
+        }
+    }
     pub(super) fn parse_comma_list<F, T>(
         parse_item: F,
         tokens: &mut Tokens,
@@ -66,26 +82,11 @@ impl Expr {
         let mut items = Vec::new();
         while tokens.peek().is_some() {
             items.push(parse_item(tokens, args));
-
             // Don't require trailing comma
             if tokens.peek().is_none() {
                 break;
             }
-
-            // For error recovery reasons, do not consume unless we 
-            // actually got a comma
-            match tokens.peek() {
-                Some(Token::Symbol(Symbol::Comma, _)) => {
-                    tokens.next();
-                }
-                tk => {
-                    tokens.messages().add(Message::expected(
-                        "comma",
-                        tk.map(|t| t.expected_name()).unwrap_or(tokens.eof_name()),
-                        tk.map(|t| t.span()).unwrap_or(tokens.last_span()),
-                    ));
-                }
-            }
+            Expr::parse_comma(tokens, args);
         }
         items
     }
