@@ -1,11 +1,11 @@
 use crate::{
-    ast::expr::{Expr, Ident, LogicChainType},
+    ast::expr::{Expr, Ident, LogicChainType, ParseArgs},
     entities::{codebase::Span, messages::Message, names::NameId},
     tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
-    fn parse_call_arg(tokens: &mut Tokens) -> (Option<Ident>, Expr) {
+    fn parse_call_arg(tokens: &mut Tokens, args: ParseArgs) -> (Option<Ident>, Expr) {
         if tokens.peek_ident() &&
             tokens.peek_n(1).is_some_and(
                 |t| matches!(t, Token::Symbol(Symbol::Colon | Symbol::Assign, _))
@@ -21,23 +21,23 @@ impl Expr {
                     sym_span
                 ));
             }
-            (Some(ident), Expr::parse(tokens))
+            (Some(ident), Expr::parse(tokens, args))
         }
         else {
-            (None, Expr::parse(tokens))
+            (None, Expr::parse(tokens, args))
         }
     }
 
-    fn parse_base(tokens: &mut Tokens) -> Expr {
-        if let Some(cf) = Expr::try_parse_control_flow(tokens) {
+    fn parse_base(tokens: &mut Tokens, args: ParseArgs) -> Expr {
+        if let Some(cf) = Expr::try_parse_control_flow(tokens, args) {
             return cf;
         }
-        if let Some(d) = Expr::try_parse_definition(tokens) {
+        if let Some(d) = Expr::try_parse_definition(tokens, args) {
             return d;
         }
-        Expr::parse_literal(tokens)
+        Expr::parse_literal(tokens, args)
     }
-    fn parse_unop(tokens: &mut Tokens) -> Self {
+    fn parse_unop(tokens: &mut Tokens, args: ParseArgs) -> Self {
         // Collect prefix unary operator (+, -, !)
         // Multiple operators are not allowed (since why would you ever 
         // actually write `--a`?)
@@ -82,7 +82,7 @@ impl Expr {
         }
 
         // Parse an actual expression
-        let mut expr = Expr::parse_base(tokens);
+        let mut expr = Expr::parse_base(tokens, args);
 
         let start = expr.span().start();
 
@@ -92,7 +92,7 @@ impl Expr {
                 let Token::Bracketed(_, mut args_tokens, _) = tokens.expect_bracketed(BracketType::Parentheses) else {
                     unreachable!("tokens.peek_bracketed returned true but expect_bracketed did not return Bracketed");
                 };
-                let args = Expr::parse_comma_list(Expr::parse_call_arg, &mut args_tokens);
+                let args = Expr::parse_comma_list(Expr::parse_call_arg, &mut args_tokens, args);
                 expr = Expr::Call {
                     target: Box::from(expr),
                     args,
@@ -127,11 +127,11 @@ impl Expr {
 
         expr
     }
-    fn parse_binop_power(tokens: &mut Tokens) -> Self {
+    fn parse_binop_power(tokens: &mut Tokens, args: ParseArgs) -> Self {
         let start = tokens.start();
-        let mut lhs = Expr::parse_unop(tokens);
+        let mut lhs = Expr::parse_unop(tokens, args);
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(|sym| sym == Symbol::Power) {
-            let rhs = Expr::parse_unop(tokens);
+            let rhs = Expr::parse_unop(tokens, args);
 
             // Check if LHS is an unary prefix operator, and issue a warning 
             // if so (since unary prefixes are ambiguous, as the mathematical 
@@ -161,12 +161,12 @@ impl Expr {
         }
         lhs
     }
-    fn parse_binop_mul(tokens: &mut Tokens) -> Self {
+    fn parse_binop_mul(tokens: &mut Tokens, args: ParseArgs) -> Self {
         let start = tokens.start();
-        let mut lhs = Expr::parse_binop_power(tokens);
+        let mut lhs = Expr::parse_binop_power(tokens, args);
         let is_sum_sym = |sym| matches!(sym, Symbol::Mul | Symbol::Div | Symbol::Mod);
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(is_sum_sym) {
-            let rhs = Expr::parse_binop_power(tokens);
+            let rhs = Expr::parse_binop_power(tokens, args);
             let func_name = tokens.names().builtin_binop_name(op);
             lhs = Expr::Call {
                 target: Box::from(Expr::Ident(Ident(func_name, span))),
@@ -177,12 +177,12 @@ impl Expr {
         }
         lhs
     }
-    fn parse_binop_sum(tokens: &mut Tokens) -> Self {
+    fn parse_binop_sum(tokens: &mut Tokens, args: ParseArgs) -> Self {
         let start = tokens.start();
-        let mut lhs = Expr::parse_binop_mul(tokens);
+        let mut lhs = Expr::parse_binop_mul(tokens, args);
         let is_sum_sym = |sym| matches!(sym, Symbol::Plus | Symbol::Minus);
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(is_sum_sym) {
-            let rhs = Expr::parse_binop_mul(tokens);
+            let rhs = Expr::parse_binop_mul(tokens, args);
             let func_name = tokens.names().builtin_binop_name(op);
             lhs = Expr::Call {
                 target: Box::from(Expr::Ident(Ident(func_name, span))),
@@ -193,9 +193,9 @@ impl Expr {
         }
         lhs
     }
-    fn parse_binop_eq(tokens: &mut Tokens) -> Self {
+    fn parse_binop_eq(tokens: &mut Tokens, args: ParseArgs) -> Self {
         let start = tokens.start();
-        let mut lhs = Expr::parse_binop_sum(tokens);
+        let mut lhs = Expr::parse_binop_sum(tokens, args);
         let is_eq_sym = |sym| matches!(sym, Symbol::Eq | Symbol::Neq | Symbol::Less | Symbol::Leq | Symbol::Meq | Symbol::More);
 
         let mut found_one = false;
@@ -212,7 +212,7 @@ impl Expr {
             }
             else {
                 found_one = true;
-                let rhs = Expr::parse_binop_sum(tokens);
+                let rhs = Expr::parse_binop_sum(tokens, args);
                 let func_name = tokens.names().builtin_binop_name(op);
                 lhs = Expr::Call {
                     target: Box::from(Expr::Ident(Ident(func_name, span))),
@@ -225,18 +225,18 @@ impl Expr {
         lhs
     }
     /// Lowest precedence binary operators: logic chains (`a and b and c` etc.)
-    fn parse_logic_chain(tokens: &mut Tokens) -> Self {
+    fn parse_logic_chain(tokens: &mut Tokens, args: ParseArgs) -> Self {
         let start = tokens.start();
-        let first = Expr::parse_binop_eq(tokens);
+        let first = Expr::parse_binop_eq(tokens, args);
 
         let is_logic_chain_sym = |sym| matches!(sym, Symbol::And | Symbol::Or);
         if let Some((orig_sym, _)) = tokens.peek_and_expect_symbol_of(is_logic_chain_sym) {
-            let second = Expr::parse_binop_eq(tokens);
+            let second = Expr::parse_binop_eq(tokens, args);
             let mut values = vec![first, second];
 
             // Parse the rest of the chain
             while let Some((next, span)) = tokens.peek_and_expect_symbol_of(is_logic_chain_sym) {
-                values.push(Expr::parse_binop_eq(tokens));
+                values.push(Expr::parse_binop_eq(tokens, args));
                 if next != orig_sym {
                     tokens.messages().add(
                         Message::new_error("mixing \"and\" and \"or\" expressions is ambiguous", span)
@@ -257,12 +257,12 @@ impl Expr {
         }
         first
     }
-    fn parse_binop_assign(tokens: &mut Tokens) -> Self {
+    fn parse_binop_assign(tokens: &mut Tokens, args: ParseArgs) -> Self {
         let start = tokens.start();
-        let mut lhs = Expr::parse_logic_chain(tokens);
+        let mut lhs = Expr::parse_logic_chain(tokens, args);
         let is_ass_sym = |sym| matches!(sym, Symbol::Assign | Symbol::AddAssign | Symbol::SubAssign);
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(is_ass_sym) {
-            let rhs = Expr::parse_logic_chain(tokens);
+            let rhs = Expr::parse_logic_chain(tokens, args);
             // Assignment is right-associative
             if let Expr::Assign { target, value, op, span } = lhs {
                 lhs = Expr::Assign {
@@ -288,8 +288,8 @@ impl Expr {
         }
         lhs
     }
-    pub(super) fn parse_binop(tokens: &mut Tokens) -> Self {
-        Self::parse_binop_assign(tokens)
+    pub(super) fn parse_binop(tokens: &mut Tokens, args: ParseArgs) -> Self {
+        Self::parse_binop_assign(tokens, args)
     }
 }
 
@@ -304,7 +304,9 @@ fn test_binop() {
 
     let names = Names::new();
     let messages = Messages::new();
-    codebase.parse_all(names.clone(), messages.clone());
+    codebase.parse_all(names.clone(), messages.clone(), ParseArgs {
+        allow_non_definitions_at_root: true,
+    });
 
     assert_eq!(
         messages.count_total(), 0,
@@ -312,7 +314,7 @@ fn test_binop() {
     );
 
     let ast = codebase.fetch(id).ast().unwrap().exprs();
-    assert_eq!(ast.len(), 0);
+    assert_eq!(ast.len(), 1);
 
     let make_shit_up = |op: Symbol, lhs: Expr, rhs: Expr| Expr::Call {
         target: Box::from(Expr::Ident(Ident(
@@ -325,21 +327,24 @@ fn test_binop() {
     };
 
     assert_eq!(ast[0],
-        make_shit_up(Symbol::Plus, 
-            make_shit_up(Symbol::Minus,
-                make_shit_up(Symbol::Plus, 
-                    Expr::Int(1, Span::zero(id)),
-                    make_shit_up(Symbol::Mul,
-                        Expr::Int(2, Span::zero(id)),
-                        make_shit_up(Symbol::Power,
-                            Expr::Int(3, Span::zero(id)),
-                            Expr::Int(4, Span::zero(id)),
+        Expr::Yield(
+            make_shit_up(Symbol::Plus, 
+                make_shit_up(Symbol::Minus,
+                    make_shit_up(Symbol::Plus, 
+                        Expr::Int(1, Span::zero(id)),
+                        make_shit_up(Symbol::Mul,
+                            Expr::Int(2, Span::zero(id)),
+                            make_shit_up(Symbol::Power,
+                                Expr::Int(3, Span::zero(id)),
+                                Expr::Int(4, Span::zero(id)),
+                            ),
                         ),
                     ),
+                    Expr::Int(5, Span::zero(id)),
                 ),
-                Expr::Int(5, Span::zero(id)),
-            ),
-            Expr::Int(6, Span::zero(id)),
-        ),
+                Expr::Int(6, Span::zero(id)),
+            ).into(),
+            Span::zero(id)
+        )
     );
 }

@@ -1,17 +1,20 @@
 
 use crate::{
-    ast::expr::Expr,
-    entities::{messages::Message},
+    ast::expr::{Expr, ParseArgs},
+    entities::messages::Message,
     tokens::{token::{Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
-    pub(super) fn parse_semicolon_list<F>(parse_item: F, tokens: &mut Tokens) -> Vec<Expr>
-        where F: Fn(&mut Tokens) -> Expr
-    {
+    pub(super) fn parse_semicolon_expr_list(
+        tokens: &mut Tokens,
+        only_definitions: bool,
+        args: ParseArgs,
+    ) -> Vec<Expr> {
         let mut exprs = Vec::new();
+        let parse = if only_definitions { Expr::parse_definition } else { Expr::parse };
         while tokens.peek().is_some() {
-            let expr = parse_item(tokens);
+            let mut expr = parse(tokens, args);
             let requires_semicolon = expr.requires_semicolon();
 
             if requires_semicolon {
@@ -22,11 +25,17 @@ impl Expr {
                         tokens.next();
                     }
                     tk => {
-                        tokens.messages().add(Message::expected(
-                            "semicolon",
-                            tk.map(|t| t.expected_name()).unwrap_or(tokens.eof_name()),
-                            tk.map(|t| t.span()).unwrap_or(tokens.last_span()),
-                        ));
+                        if only_definitions {
+                            tokens.messages().add(Message::expected(
+                                "semicolon",
+                                tk.map(|t| t.expected_name()).unwrap_or(tokens.eof_name()),
+                                tk.map(|t| t.span()).unwrap_or(tokens.last_span()),
+                            ));
+                        }
+                        else {
+                            let span = expr.span();
+                            expr = Expr::Yield(Box::from(expr), span);
+                        }
                     }
                 }
             }
@@ -47,12 +56,16 @@ impl Expr {
         }
         exprs
     }
-    pub(super) fn parse_comma_list<F, T>(parse_item: F, tokens: &mut Tokens) -> Vec<T>
-        where F: Fn(&mut Tokens) -> T
+    pub(super) fn parse_comma_list<F, T>(
+        parse_item: F,
+        tokens: &mut Tokens,
+        args: ParseArgs,
+    ) -> Vec<T>
+        where F: Fn(&mut Tokens, ParseArgs) -> T
     {
         let mut items = Vec::new();
         while tokens.peek().is_some() {
-            items.push(parse_item(tokens));
+            items.push(parse_item(tokens, args));
 
             // Don't require trailing comma
             if tokens.peek().is_none() {

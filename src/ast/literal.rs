@@ -1,12 +1,12 @@
 use crate::{
-    ast::expr::{Expr, Ident, StringComp},
+    ast::expr::{Expr, Ident, ParseArgs, StringComp},
     entities::names::MISSING_NAME,
     tokens::{token::{StrLitComp, Token},
     tokenstream::Tokens
 }};
 
 impl Expr {
-    pub(super) fn parse_literal(tokens: &mut Tokens) -> Expr {
+    pub(super) fn parse_literal(tokens: &mut Tokens, args: ParseArgs) -> Expr {
         if tokens.peek_int() {
             let Token::Int(num, span) = tokens.expect_int() else {
                 unreachable!("tokens.peek_int() returned true but expect_int() did not return an integer");
@@ -27,7 +27,7 @@ impl Expr {
                 value.into_iter().map(|c| match c {
                     StrLitComp::String(s) => StringComp::String(s),
                     StrLitComp::Component(mut c) => {
-                        let expr = Expr::parse(&mut c);
+                        let expr = Expr::parse(&mut c, args);
                         c.expect_empty();
                         StringComp::Expr(expr)
                     }

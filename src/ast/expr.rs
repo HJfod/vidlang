@@ -79,13 +79,14 @@ pub enum Expr {
         falsy: Option<Box<Expr>>,
         span: Span,
     },
+    Yield(Box<Expr>, Span),
     // `{ .. }`
     Block(Vec<Expr>, Span),
 }
 
 impl Expr {
-    pub fn parse(tokens: &mut Tokens) -> Self {
-        Self::parse_binop(tokens)
+    pub fn parse(tokens: &mut Tokens, args: ParseArgs) -> Self {
+        Self::parse_binop(tokens, args)
     }
     pub fn requires_semicolon(&self) -> bool {
         match self {
@@ -105,6 +106,7 @@ impl Expr {
                 falsy.as_ref()
                     .map(|f| f.requires_semicolon())
                     .unwrap_or(truthy.requires_semicolon()),
+            Self::Yield(value, ..) => value.requires_semicolon(),
             Self::Block(..) => false,
         }
     }
@@ -120,7 +122,23 @@ impl Expr {
             Expr::Assign { span, .. } => *span,
             Expr::LogicChain { span, .. } => *span,
             Expr::If { span, .. } => *span,
+            Expr::Yield(_, span) => *span,
             Expr::Block(_, span) => *span,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct ParseArgs {
+    // Useful for tests
+    pub allow_non_definitions_at_root: bool,
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for ParseArgs {
+    fn default() -> Self {
+        Self {
+            allow_non_definitions_at_root: false,
         }
     }
 }
@@ -128,8 +146,8 @@ impl Expr {
 #[derive(Debug)]
 pub struct Ast(Vec<Expr>);
 impl Ast {
-    pub fn parse(tokens: &mut Tokens) -> Ast {
-        Ast(Expr::parse_semicolon_list(Expr::parse_definition, tokens))
+    pub fn parse(tokens: &mut Tokens, args: ParseArgs) -> Ast {
+        Ast(Expr::parse_semicolon_expr_list(tokens, !args.allow_non_definitions_at_root, args))
     }
     pub fn exprs(&self) -> &[Expr] {
         &self.0
@@ -152,7 +170,9 @@ fn test_parse() {
             x += hi_guys();
         }
     "#);
-    codebase.parse_all(names.clone(), messages.clone());
+    codebase.parse_all(names.clone(), messages.clone(), ParseArgs {
+        allow_non_definitions_at_root: true
+    });
     assert_eq!(
         messages.count_total(), 0,
         "messages was not empty:\n{}", messages.to_test_string(&codebase)
