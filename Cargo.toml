@@ -8,4 +8,3 @@ clap = { version = "4.5.60", features=["derive"] }
 strum = "0.28"
 strum_macros = "0.28"
 unicode-xid = "0.2.6"
-concat-idents = "1.1"

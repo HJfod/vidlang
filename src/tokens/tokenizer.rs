@@ -122,7 +122,7 @@ impl<'s> Iterator for Tokenizer<'s> {
                         }
                         c => c
                     };
-                    if comps.last().is_none_or(|c| matches!(c, StrLitComp::String(_))) {
+                    if comps.last().is_none_or(|c| !matches!(c, StrLitComp::String(_))) {
                         comps.push(StrLitComp::String(String::new()));
                     }
                     // SAFETY: The line above should ensure that the last 
@@ -276,6 +276,42 @@ impl<'s> Iterator for Tokenizer<'s> {
             }
         }
     }
+}
+
+#[test]
+fn strings() {
+    use crate::entities::codebase::Codebase;
+    use std::assert_matches;
+
+    let names = Names::new();
+    let messages = Messages::new();
+    let mut codebase = Codebase::new();
+    let id = codebase.add_memory("strings", r#"
+        "String with\nmore lines and\n\tescape sequences!"
+        "String with {  interpolation  } and {stuff}{}"
+    "#);
+    let mut tokens = codebase.fetch(id).tokenize(names.clone(), messages.clone()).unwrap();
+
+    let Some(Token::String(escaped_vec, _)) = tokens.next() else { panic!() };
+    assert_eq!(escaped_vec.len(), 1, "string literal parts: {escaped_vec:?}");
+    let Some(StrLitComp::String(esc)) = escaped_vec.into_iter().next() else { panic!() };
+    assert_eq!(esc, "String with\nmore lines and\n\tescape sequences!");
+
+    let Some(Token::String(interp_vec, _)) = tokens.next() else { panic!() };
+    assert_eq!(interp_vec.len(), 5, "string literal parts: {interp_vec:?}");
+
+    let mut interp = interp_vec.into_iter();
+    assert_matches!(interp.next(), Some(StrLitComp::String(s)) if s == "String with ");
+    assert_matches!(interp.next(),
+        Some(StrLitComp::Component(tks)) if tks.peek_n(1).is_none() &&
+            matches!(tks.peek(), Some(Token::Ident(name, _)) if *name == names.add("interpolation"))
+    );
+    assert_matches!(interp.next(), Some(StrLitComp::String(s)) if s == " and ");
+    assert_matches!(interp.next(),
+        Some(StrLitComp::Component(tks)) if tks.peek_n(1).is_none() &&
+            matches!(tks.peek(), Some(Token::Ident(name, _)) if *name == names.add("stuff"))
+    );
+    assert_matches!(interp.next(), Some(StrLitComp::Component(tks)) if tks.peek().is_none());
 }
 
 #[test]

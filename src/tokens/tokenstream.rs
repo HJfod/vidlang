@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use crate::{ast::expr::Ident, entities::{codebase::Span, messages::{Message, Messages}, names::{MISSING_NAME, Names}}, lookahead_iter::Looakhead, tokens::token::{BracketType, Symbol, Token}};
-use concat_idents::concat_idents;
 
 // Realistically most of our file is already in one big Vec<Token> anyway because 
 // of brackets containing subtrees so might as well make it all a big Vec<Token>
@@ -33,41 +32,51 @@ impl Tokens {
         self.iter.lookahead(index)
     }
 
-    pub fn peek_ident(&self) -> bool {
-        self.peek().is_some_and(|p| matches!(p, Token::Ident(..)))
+    fn skip_attributes(&mut self) {
+        while self.peek_attr() {
+            let tk = self.next().unwrap();
+            self.messages.add(Message::new_error("attributes are not allowed here", tk.span()));
+        }
+    }
+
+    fn peek_no_attrs<F: Fn(&Token) -> bool>(&mut self, matcher: F) -> bool {
+        self.skip_attributes();
+        self.peek().is_some_and(matcher)
+    }
+    fn expect_no_attrs<S: Display, F: Fn(&Token) -> bool>(&mut self, expected: S, matcher: F) -> Token {
+        self.skip_attributes();
+        match self.next() {
+            Some(t) if matcher(&t) => t,
+            Some(bad) => {
+                self.messages.add(Message::expected(
+                    expected.to_string(), bad.expected_name(), bad.span()
+                ));
+                bad
+            }
+            None => Token::Int(0, self.last_span)
+        }
+    }
+
+    pub fn peek_ident(&mut self) -> bool {
+        self.peek_no_attrs(|p| matches!(p, Token::Ident(..)))
     }
     pub fn expect_ident(&mut self) -> Ident {
-        let tk = self.next();
-        if let Some(Token::Ident(name, span)) = tk {
+        if let Token::Ident(name, span) = self.expect_no_attrs(
+            "identifier", |tk| matches!(tk, Token::Ident(..))
+        ) {
             return Ident(name, span);
         }
-        self.messages.add(Message::expected(
-            "identifier",
-            tk.as_ref().map(|t| t.expected_name()).unwrap_or(&self.eof_name),
-            tk.as_ref().map(|t| t.span()).unwrap_or(self.last_span)
-        ));
         Ident(MISSING_NAME, self.last_span)
     }
 
-    pub fn peek_symbol(&self, symbol: Symbol) -> bool {
-        self.peek().is_some_and(|p| match p {
-            Token::Symbol(sym, _) => *sym == symbol,
-            _ => false,
-        })
+    pub fn peek_symbol(&mut self, symbol: Symbol) -> bool {
+        self.peek_no_attrs(|p| matches!(p, Token::Symbol(sym, ..) if *sym == symbol))
     }
     pub fn expect_symbol(&mut self, symbol: Symbol) -> Token {
-        let tk = self.next();
-        if tk.as_ref().is_none_or(|tk| match tk {
-            Token::Symbol(sym, _) => *sym != symbol,
-            _ => true,
-        }) {
-            self.messages.add(Message::expected(
-                format!("'{symbol}'"),
-                tk.as_ref().map(|t| t.expected_name()).unwrap_or(&self.eof_name),
-                tk.as_ref().map(|t| t.span()).unwrap_or(self.last_span)
-            ));
-        }
-        tk.unwrap_or(Token::Symbol(symbol, self.last_span))
+        self.expect_no_attrs(
+            format!("'{symbol}'"),
+            |tk| matches!(tk, Token::Symbol(sym, ..) if *sym == symbol)
+        )
     }
     pub fn peek_and_expect_symbol(&mut self, symbol: Symbol) -> bool {
         if self.peek_symbol(symbol) {
@@ -79,10 +88,7 @@ impl Tokens {
     pub fn peek_and_expect_symbol_of<F>(&mut self, matches: F) -> Option<(Symbol, Span)>
         where F: Fn(Symbol) -> bool
     {
-        if self.peek().is_some_and(|p| match p {
-            Token::Symbol(sym, _) => matches(*sym),
-            _ => false,
-        }) {
+        if self.peek_no_attrs(|tk| matches!(tk, Token::Symbol(sym, ..) if matches(*sym))) {
             let Some(Token::Symbol(sym, span)) = self.next() else {
                 unreachable!("peek_and_expect_symbol_of: peeked token did not match parsed one");
             };
@@ -91,35 +97,48 @@ impl Tokens {
         None
     }
 
-    pub fn peek_bracketed(&self, ty: BracketType) -> bool {
-        self.peek().is_some_and(|p| match p {
-            Token::Bracketed(bty, _, _) => *bty == ty,
-            _ => false,
-        })
+    pub fn peek_int(&mut self) -> bool {
+        self.peek_no_attrs(|p| matches!(p, Token::Int(..)))
+    }
+    pub fn expect_int(&mut self) -> Token {
+        self.expect_no_attrs("integer", |tk| matches!(tk, Token::Int(..)))
+    }
+    pub fn peek_float(&mut self) -> bool {
+        self.peek_no_attrs(|p| matches!(p, Token::Float(..)))
+    }
+    pub fn expect_float(&mut self) -> Token {
+        self.expect_no_attrs("float", |tk| matches!(tk, Token::Float(..)))
+    }
+    pub fn peek_str(&mut self) -> bool {
+        self.peek_no_attrs(|p| matches!(p, Token::String(..)))
+    }
+    pub fn expect_str(&mut self) -> Token {
+        self.expect_no_attrs("string", |tk| matches!(tk, Token::String(..)))
+    }
+    pub fn peek_bracketed(&mut self, ty: BracketType) -> bool {
+        self.peek_no_attrs(|p| matches!(p, Token::Bracketed(bty, ..) if *bty == ty))
     }
     pub fn expect_bracketed(&mut self, ty: BracketType) -> Token {
+        self.expect_no_attrs(
+            ty.expected_name(),
+            |tk| matches!(tk, Token::Bracketed(bty, ..) if *bty == ty)
+        )
+    }
+
+    pub fn peek_attr(&mut self) -> bool {
+        // Cannot use peek_no_attrs here since that skips attrs
+        self.peek().is_some_and(|p| matches!(p, Token::Attribute(..)))
+    }
+    pub fn expect_attr(&mut self) -> Token {
         let tk = self.next();
-        if tk.as_ref().is_none_or(|tk| match tk {
-            Token::Bracketed(bty, _, _) => *bty != ty,
-            _ => true,
-        }) {
+        if !matches!(tk, Some(Token::Attribute(..))) {
             self.messages.add(Message::expected(
-                ty.expected_name(),
+                "attribute",
                 tk.as_ref().map(|t| t.expected_name()).unwrap_or(&self.eof_name),
                 tk.as_ref().map(|t| t.span()).unwrap_or(self.last_span)
             ));
         }
-        tk.unwrap_or_else(|| Token::Bracketed(
-            ty,
-            Box::from(Tokens::new(
-                vec![],
-                ty.close().to_string(),
-                self.last_span,
-                self.names(),
-                self.messages()
-            )),
-            self.last_span
-        ))
+        tk.unwrap_or(Token::Int(0, self.last_span))
     }
 
     pub fn expected(&mut self, what: &str) -> Span {
@@ -159,55 +178,6 @@ impl Tokens {
     }
 }
 
-macro_rules! impl_tokens_expect {
-    ($name: ident, $variant: ident, $default_val: expr) => {
-        impl_tokens_expect!(
-            $name,
-            Token::$variant(_, _),
-            |span| Token::$variant($default_val, span)
-        );
-    };
-    ($name: ident, $pat: pat, $default_pat: expr) => {
-        concat_idents!(__peek_name = peek_, $name {
-            impl Tokens {
-                pub fn __peek_name(&self) -> bool {
-                    matches!(self.peek(), Some($pat))
-                }
-            }
-        });
-        concat_idents!(__expect_name = expect_, $name {
-            impl Tokens {
-                pub fn __expect_name(&mut self) -> Token {
-                    match self.next() {
-                        Some(tk @ Token::Int(_, _)) => tk,
-                        Some(wrong_tk) => {
-                            let span = wrong_tk.span();
-                            let right_tk = ($default_pat)(span);
-                            self.messages.add(Message::expected(
-                                right_tk.expected_name(), wrong_tk.expected_name(), span
-                            ));
-                            right_tk
-                        }
-                        None => {
-                            let span = self.last_span;
-                            let right_tk = ($default_pat)(span);
-                            self.messages.add(Message::expected(
-                                right_tk.expected_name(), "eof", span
-                            ));
-                            right_tk
-                        }
-                    }
-                }
-            }
-        });
-    };
-}
-
-impl_tokens_expect!(int, Int, 0);
-impl_tokens_expect!(float, Float, 0.0);
-impl_tokens_expect!(str, String, vec![]);
-impl_tokens_expect!(attr, Token::Attribute(_, _, _), |span| Token::Attribute(MISSING_NAME, None, span));
-
 impl Iterator for Tokens {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
@@ -219,4 +189,41 @@ impl Iterator for Tokens {
             None => None,
         }
     }
+}
+
+#[test]
+fn tokenizing() {
+    use crate::entities::codebase::Codebase;
+    
+    let names = Names::new();
+    let messages = Messages::new();
+    let mut codebase = Codebase::new();
+    let id = codebase.add_memory("test_tokenizer", r#"
+        let x += -5 + 2.3;
+        @thing("dawg", 5.2)
+        "Hello, world!\n\t";
+    "#);
+
+    let mut tokens = codebase.fetch(id).tokenize(names, messages.clone()).unwrap();
+    tokens.expect_symbol(Symbol::Let);
+    tokens.expect_ident();
+    tokens.expect_symbol(Symbol::AddAssign);
+    tokens.expect_symbol(Symbol::Minus);
+    tokens.expect_int();
+    tokens.expect_symbol(Symbol::Plus);
+    tokens.expect_float();
+    tokens.expect_symbol(Symbol::Semicolon);
+    
+    let Token::Attribute(_, Some(mut sub), _) = tokens.expect_attr() else {
+        panic!();
+    };
+    sub.expect_str();
+    sub.expect_symbol(Symbol::Comma);
+    sub.expect_float();
+    sub.expect_empty();
+
+    tokens.expect_str();
+    tokens.expect_symbol(Symbol::Semicolon);
+    tokens.expect_empty();
+    assert!(messages.count_total() == 0, "{messages:?}");
 }
