@@ -13,7 +13,7 @@ clip epic_rectangle(width: float, height: float) {
     // Property
     public let size = (width, height);
 
-    // Variable
+    // Variable (still a property, just private)
     let rect = rectangle(width, height);
     
     await rect;
@@ -26,8 +26,8 @@ clip to<T>(ref target: T, value: T, const time: duration) {
     await time;
 }
 
-clip ease(target: Clip, in: bool = true, out: bool = true) {
-    let easeInMultiplier = implEaseInOut(in, out);
+clip ease(target: Clip, do_in: bool = true, do_out: bool = true) {
+    let easeInMultiplier = implEaseInOut(do_in, do_out);
     target(frame: frame * easeInMultiplier);
 }
 
@@ -44,6 +44,6 @@ function move(target: Clip, x: float, y: float) {
 }
 
 // Clips and functions can have const parameters (for duration purposes)
-function tween(ref value: int, const time: duration) -> const duration {
+function tween(ref value: int, const time: duration) -> duration {
 
 }

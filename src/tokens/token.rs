@@ -47,8 +47,8 @@ impl BracketType {
 #[strum(serialize_all="snake_case")]
 pub enum Symbol {
     // Keywords
-    Let, Const, Type, Function, Clip,
-    Await,
+    Let, Const, Type, Function, Clip, Ref,
+    Await, Return, Yield,
     Trait, Impl, Struct,
     If, Then, Else, While, For, In, Loop,
     And, Or,

@@ -1,27 +1,30 @@
 
 use crate::{
-    ast::expr::{Expr, Ident, ParseArgs, TyExpr},
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, ParseArgs, TyExpr},
     entities::messages::Message,
     tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
-    fn parse_function_arg(tokens: &mut Tokens, args: ParseArgs) -> (Ident, TyExpr, Option<Expr>) {
-        let name = tokens.expect_ident();
-        tokens.expect_symbol(Symbol::Colon);
-        let ty = TyExpr::parse(tokens, args);
-        let default_value = tokens.peek_and_expect_symbol(Symbol::Assign)
-            .then(|| Expr::parse(tokens, args));
-        (name, ty, default_value)
-    }
-    fn parse_arrow_function_arg(tokens: &mut Tokens, args: ParseArgs) -> (Ident, Option<TyExpr>, Option<Expr>) {
+    fn parse_function_param(tokens: &mut Tokens, args: ParseArgs) -> FunctionParam {
+        let kind;
+        if tokens.peek_and_expect_symbol(Symbol::Ref) {
+            kind = FunctionParamKind::Ref;
+        }
+        else if tokens.peek_and_expect_symbol(Symbol::Const) {
+            kind = FunctionParamKind::Const;
+        }
+        else {
+            kind = FunctionParamKind::Normal;
+        }
         let name = tokens.expect_ident();
         let ty = tokens.peek_and_expect_symbol(Symbol::Colon)
             .then(|| TyExpr::parse(tokens, args));
         let default_value = tokens.peek_and_expect_symbol(Symbol::Assign)
-            .then(|| Expr::parse(tokens, args));
-        (name, ty, default_value)
+            .then(|| Box::from(Expr::parse(tokens, args)));
+        FunctionParam { kind, name, ty, default_value }
     }
+
     pub(super) fn try_parse_definition(tokens: &mut Tokens, args: ParseArgs) -> Option<Self> {
         let start = tokens.start();
 
@@ -39,18 +42,39 @@ impl Expr {
             });
         }
 
-        // Function definition
-        if tokens.peek_and_expect_symbol(Symbol::Function) {
+        // Function or clip definition
+        if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(
+            |sym| matches!(sym, Symbol::Function | Symbol::Clip)
+        ) {
             let name = tokens.expect_ident();
             let generics = TyExpr::try_parse_generic_params(tokens, args);
             let params = match tokens.expect_bracketed(BracketType::Parentheses) {
                 Token::Bracketed(_, mut params_tokens, _) => Expr::parse_comma_list(
-                    Expr::parse_function_arg, &mut params_tokens, args
+                    Expr::parse_function_param, &mut params_tokens, args
                 ),
                 _ => vec![],
             };
             let return_ty = tokens.peek_and_expect_symbol(Symbol::Arrow)
-                .then(|| TyExpr::parse(tokens, args));
+                .then(|| {
+                    // Note: If I add object types this'll fail
+                    if tokens.peek_bracketed(BracketType::Braces) {
+                        tokens.messages().add(Message::expected_what(
+                            "expected return type",
+                            tokens.last_span()
+                        ));
+                        return None;
+                    }
+                    Some(TyExpr::parse(tokens, args))
+                })
+                .flatten();
+
+            // Clips have special wacky types
+            if let Some(ref ret) = return_ty && sym == Symbol::Clip {
+                tokens.messages().add(Message::new_error(
+                    "clips may not have explicit return types", ret.span()
+                ));
+            }
+
             // Shorthand syntax `f() => expr`
             let body = Box::from(
                 if tokens.peek_and_expect_symbol(Symbol::FatArrow) {
@@ -62,6 +86,7 @@ impl Expr {
             );
             return Some(Expr::Function {
                 name, generics, params, return_ty, body,
+                is_clip: sym == Symbol::Clip,
                 span: tokens.span_from(start)
             });
         }
@@ -77,12 +102,17 @@ impl Expr {
             )
         {
             let params = if tokens.peek_ident() {
-                vec![(tokens.expect_ident(), None, None)]
+                vec![FunctionParam {
+                    kind: FunctionParamKind::Normal,
+                    name: tokens.expect_ident(),
+                    ty: None,
+                    default_value: None
+                }]
             }
             else {
                 match tokens.expect_bracketed(BracketType::Parentheses) {
                     Token::Bracketed(_, mut params_tokens, _) => Expr::parse_comma_list(
-                        Expr::parse_arrow_function_arg, &mut params_tokens, args
+                        Expr::parse_function_param, &mut params_tokens, args
                     ),
                     _ => vec![],
                 }

@@ -33,6 +33,14 @@ impl Expr {
             let expr = Expr::parse(tokens, args);
             return Some(Self::Await(Box::from(expr), tokens.span_from(start)));
         }
+        if tokens.peek_and_expect_symbol(Symbol::Return) {
+            // Don't parse return value if there is a separator or eof coming
+            let no_expr = tokens.peek_symbol(Symbol::Semicolon) ||
+                tokens.peek_symbol(Symbol::Comma) ||
+                tokens.peek().is_none();
+            let expr = (!no_expr).then(|| Expr::parse(tokens, args).into());
+            return Some(Self::Return(expr, tokens.span_from(start)));
+        }
 
         None
     }

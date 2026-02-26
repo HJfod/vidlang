@@ -35,7 +35,7 @@ impl Expr {
         if let Some(d) = Expr::try_parse_definition(tokens, args) {
             return d;
         }
-        Expr::parse_literal(tokens, args)
+        Expr::parse_value(tokens, args)
     }
     fn parse_unop(tokens: &mut Tokens, args: ParseArgs) -> Self {
         // Collect prefix unary operator (+, -, !)

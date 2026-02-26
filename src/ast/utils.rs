@@ -25,13 +25,14 @@ impl Expr {
                         tokens.next();
                     }
                     tk => {
-                        if only_definitions {
+                        if only_definitions || tk.is_some() {
                             tokens.messages().add(Message::expected(
                                 "semicolon",
                                 tk.map(|t| t.expected_name()).unwrap_or(tokens.eof_name()),
                                 tk.map(|t| t.span()).unwrap_or(tokens.last_span()),
                             ));
                         }
+                        // Last statement is transformed into `yield x`
                         else {
                             let span = expr.span();
                             expr = Expr::Yield(Box::from(expr), span);
