@@ -70,6 +70,13 @@ pub struct FunctionParam {
 
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
+pub enum Visibility {
+    Public,
+    Private,
+}
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum Expr {
     // Literals
     Int(u64, Span),
@@ -80,6 +87,7 @@ pub enum Expr {
 
     // `let a: B = 5`
     Var {
+        visibility: Visibility,
         name: Ident,
         ty: Option<TyExpr>,
         value: Option<Box<Expr>>,
@@ -87,6 +95,7 @@ pub enum Expr {
         span: Span,
     },
     Function {
+        visibility: Visibility,
         name: Ident,
         generics: Option<Vec<(Ident, Option<TyExpr>)>>,
         params: Vec<FunctionParam>,
@@ -284,6 +293,7 @@ fn parse() {
 
     assert_eq!(*ast_exprs, vec![
         Expr::Var {
+            visibility: Visibility::Private,
             name: Ident(names.add("x"), Span::zero(id)),
             ty: None,
             value: Some(Box::from(Expr::Int(8, Span::zero(id)))),

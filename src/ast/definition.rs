@@ -1,12 +1,12 @@
 
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, ParseArgs, TyExpr},
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, ParseArgs, TyExpr, Visibility},
     entities::messages::Message,
     tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
-    fn parse_function_param(tokens: &mut Tokens, args: ParseArgs) -> FunctionParam {
+    pub(super) fn parse_function_param(tokens: &mut Tokens, args: ParseArgs) -> FunctionParam {
         let kind;
         if tokens.peek_and_expect_symbol(Symbol::Ref) {
             kind = FunctionParamKind::Ref;
@@ -28,6 +28,24 @@ impl Expr {
     pub(super) fn try_parse_definition(tokens: &mut Tokens, args: ParseArgs) -> Option<Self> {
         let start = tokens.start();
 
+        // Get visibility; by default, everything is private
+        let mut visibility = Visibility::Private;
+        let mut found_explicit_vis = None;
+        while let Some((sym, span)) = tokens.peek_and_expect_symbol_of(
+            |sym| matches!(sym, Symbol::Private | Symbol::Public)
+        ) {
+            if found_explicit_vis.is_some() {
+                tokens.messages().add(Message::new_error(
+                    "only one visibility modifier may be used per definition",
+                    span
+                ));
+            }
+            else {
+                found_explicit_vis = Some(span);
+                visibility = if sym == Symbol::Private { Visibility::Public } else { Visibility::Private };
+            }
+        }
+
         // Variable definition
         if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(|sym| matches!(sym, Symbol::Let | Symbol::Const)) {
             let name = tokens.expect_ident();
@@ -36,6 +54,7 @@ impl Expr {
             let value = tokens.peek_and_expect_symbol(Symbol::Assign)
                 .then(|| Box::from(Expr::parse(tokens, args)));
             return Some(Expr::Var {
+                visibility,
                 name, ty, value,
                 span: tokens.span_from(start),
                 is_const: sym == Symbol::Const,
@@ -85,49 +104,20 @@ impl Expr {
                 }
             );
             return Some(Expr::Function {
+                visibility,
                 name, generics, params, return_ty, body,
                 is_clip: sym == Symbol::Clip,
                 span: tokens.span_from(start)
             });
         }
 
-        // Arrow functions
-        if (
-            tokens.peek_bracketed(BracketType::Parentheses) || 
-            // Allow `a => a` syntax
-            tokens.peek_ident()
-         ) &&
-            tokens.peek_n(1).is_some_and(
-                |t| matches!(t, Token::Symbol(Symbol::FatArrow | Symbol::Arrow, _))
-            )
-        {
-            let params = if tokens.peek_ident() {
-                vec![FunctionParam {
-                    kind: FunctionParamKind::Normal,
-                    name: tokens.expect_ident(),
-                    ty: None,
-                    default_value: None
-                }]
-            }
-            else {
-                match tokens.expect_bracketed(BracketType::Parentheses) {
-                    Token::Bracketed(_, mut params_tokens, _) => Expr::parse_comma_list(
-                        Expr::parse_function_param, &mut params_tokens, args
-                    ),
-                    _ => vec![],
-                }
-            };
-            let Some(Token::Symbol(sym, sym_span)) = tokens.next() else {
-                unreachable!("a symbol was previously peeked but tokens.next() did not return one");
-            };
-            if sym == Symbol::Arrow {
-                tokens.messages().add(Message::new_error(
-                    "arrow functions are defined with `=>`, not `->`",
-                    sym_span
-                ));
-            }
-            let body = Box::from(Expr::parse(tokens, args));
-            return Some(Expr::ArrowFunction { params, body, span: tokens.span_from(start) });
+        // If an explicit visibility specifier was used, then we know the user 
+        // attempted to write a definition
+        if let Some(span) = found_explicit_vis {
+            // This purposefully doesn't consume, since this function returns 
+            // an Option, so its caller will continue consuming. Not consuming 
+            // here allows for possible error recovery
+            tokens.messages().add(Message::expected_what("definition", span.next_ch()));
         }
         
         None

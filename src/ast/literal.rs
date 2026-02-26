@@ -1,12 +1,64 @@
 use crate::{
-    ast::expr::{Expr, Ident, ParseArgs, StringComp},
-    entities::names::MISSING_NAME,
-    tokens::{token::{BracketType, StrLitComp, Token},
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, Ident, ParseArgs, StringComp},
+    entities::{messages::Message, names::MISSING_NAME},
+    tokens::{token::{BracketType, StrLitComp, Symbol, Token},
     tokenstream::Tokens
 }};
 
 impl Expr {
     pub(super) fn parse_value(tokens: &mut Tokens, args: ParseArgs) -> Expr {
+        // Arrow functions
+        if (
+            tokens.peek_bracketed(BracketType::Parentheses) || 
+            // Allow `a => a` syntax
+            tokens.peek_ident()
+         ) &&
+            tokens.peek_n(1).is_some_and(
+                |t| matches!(t, Token::Symbol(Symbol::FatArrow | Symbol::Arrow, _))
+            )
+        {
+            let start = tokens.start();
+
+            let params = if tokens.peek_ident() {
+                vec![FunctionParam {
+                    kind: FunctionParamKind::Normal,
+                    name: tokens.expect_ident(),
+                    ty: None,
+                    default_value: None
+                }]
+            }
+            else {
+                match tokens.expect_bracketed(BracketType::Parentheses) {
+                    Token::Bracketed(_, mut params_tokens, _) => Expr::parse_comma_list(
+                        Expr::parse_function_param, &mut params_tokens, args
+                    ),
+                    _ => vec![],
+                }
+            };
+            let Some(Token::Symbol(sym, sym_span)) = tokens.next() else {
+                unreachable!("a symbol was previously peeked but tokens.next() did not return one");
+            };
+            if sym == Symbol::Arrow {
+                tokens.messages().add(Message::new_error(
+                    "arrow functions are defined with `=>`, not `->`",
+                    sym_span
+                ));
+            }
+            let body = Box::from(Expr::parse(tokens, args));
+            return Expr::ArrowFunction { params, body, span: tokens.span_from(start) };
+        }
+
+        // Tuples
+        if tokens.peek_bracketed(BracketType::Parentheses) {
+            let start = tokens.start();
+            let Token::Bracketed(_, mut sub_tokens, _) = tokens.expect_bracketed(BracketType::Parentheses) else {
+                unreachable!("tokens.expect_bracketed didnt return Bracketed despite being peeked");
+            };
+            let fields = Expr::parse_comma_list(Expr::parse, &mut sub_tokens, args);
+            return Expr::Tuple(fields, tokens.span_from(start));
+        }
+
+        // Basic literals
         if tokens.peek_int() {
             let Token::Int(num, span) = tokens.expect_int() else {
                 unreachable!("tokens.peek_int() returned true but expect_int() did not return an integer");
@@ -38,14 +90,7 @@ impl Expr {
         if tokens.peek_ident() {
             return Expr::Ident(tokens.expect_ident());
         }
-        if tokens.peek_bracketed(BracketType::Parentheses) {
-            let start = tokens.start();
-            let Token::Bracketed(_, mut sub_tokens, _) = tokens.expect_bracketed(BracketType::Parentheses) else {
-                unreachable!("tokens.expect_bracketed didnt return Bracketed despite being peeked");
-            };
-            let fields = Expr::parse_comma_list(Expr::parse, &mut sub_tokens, args);
-            return Expr::Tuple(fields, tokens.span_from(start));
-        }
+
         let span = tokens.expected("expression");
         Expr::Ident(Ident(MISSING_NAME, span))
     }
