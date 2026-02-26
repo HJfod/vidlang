@@ -59,6 +59,12 @@ impl Expr {
         }
 
         // Basic literals
+        if tokens.peek_symbol(Symbol::False) || tokens.peek_symbol(Symbol::True) {
+            let Some(Token::Symbol(sym, span)) = tokens.next() else {
+                unreachable!("tokens.peek_symbol returned true but next() did not return a symbol");
+            };
+            return Expr::Bool(sym == Symbol::True, span);
+        }
         if tokens.peek_int() {
             let Token::Int(num, span) = tokens.expect_int() else {
                 unreachable!("tokens.peek_int() returned true but expect_int() did not return an integer");

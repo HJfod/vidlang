@@ -7,6 +7,7 @@ mod ast;
 mod entities;
 mod tokens;
 mod lookahead_iter;
+mod check;
 
 #[derive(Debug, Parser)]
 struct CliArgs {

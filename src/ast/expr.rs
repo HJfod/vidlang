@@ -78,7 +78,7 @@ pub enum Visibility {
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum Expr {
-    // Literals
+    Bool(bool, Span),
     Int(u64, Span),
     Float(f64, Span),
     String(Vec<StringComp>, Span),
@@ -157,6 +157,7 @@ impl Expr {
     }
     pub fn requires_semicolon(&self) -> bool {
         match self {
+            Self::Bool(..) => true,
             Self::Int(..) => true,
             Self::Float(..) => true,
             Self::String(..) => true,
@@ -186,6 +187,7 @@ impl Expr {
     }
     pub fn span(&self) -> Span {
         match self {
+            Self::Bool(_, span) => *span,
             Self::Int(_, span) => *span,
             Self::Float(_, span) => *span,
             Self::String(_, span) => *span,

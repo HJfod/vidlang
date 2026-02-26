@@ -51,6 +51,7 @@ pub enum Symbol {
     Private, Public, Ref,
     If, Then, Else, While, For, In, Loop, Await, Return, Yield,
     And, Or,
+    True, False,
     // Operators
     #[strum(to_string="=")]
     Assign,
@@ -137,13 +138,13 @@ impl Token {
     }
     pub fn expected_name(&self) -> &'static str {
         match self {
-            Self::Int(_, _)          => "integer literal",
-            Self::Float(_, _)        => "floating point literal",
-            Self::String(_, _)       => "string literal",
-            Self::Ident(_, _)        => "identifier",
-            Self::Symbol(_, _)       => "keyword or operator",
-            Self::Bracketed(_, _, _) => "bracketed sequence",
-            Self::Attribute(_, _, _) => "attribute",
+            Self::Int(..)           => "integer",
+            Self::Float(..)         => "float",
+            Self::String(..)        => "string",
+            Self::Ident(..)         => "identifier",
+            Self::Symbol(..)        => "keyword or operator",
+            Self::Bracketed(ty, ..) => ty.expected_name(),
+            Self::Attribute(..)     => "attribute",
         }
     }
 }

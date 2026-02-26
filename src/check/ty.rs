@@ -1,0 +1,24 @@
+use crate::{ast::expr::Expr, entities::names::NameId};
+
+pub enum Ty {
+    Bool,
+    Int,
+    Float,
+    String,
+    Tuple(Vec<Ty>),
+    Function {
+        params: Vec<(Ty, bool)>,
+        return_ty: Box<Ty>,
+    },
+    Alias {
+        name: NameId,
+        of: Box<Ty>,
+        /// Newtypes are never implicitly convertible to their target type
+        is_newtype: bool
+    },
+    /// Type whose value is not yet resolved
+    Undecided,
+    /// Type produced by non-exhaustive constructs (i.e. value is never assignable)
+    // todo: maybe put all exprs in a pool for stuff like this?
+    NonExhaustive(Expr),
+}
