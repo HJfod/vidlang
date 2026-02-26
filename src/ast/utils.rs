@@ -22,7 +22,6 @@ impl Expr {
                         tokens.next();
                     }
                     tk => {
-                        println!("{expr:?} requires semicolon: {requires_semicolon}");
                         tokens.messages().add(Message::expected(
                             "semicolon",
                             tk.map(|t| t.expected_name()).unwrap_or(tokens.eof_name()),

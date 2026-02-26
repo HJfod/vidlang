@@ -127,12 +127,46 @@ impl Expr {
 
         expr
     }
-    fn parse_binop_mul(tokens: &mut Tokens) -> Self {
+    fn parse_binop_power(tokens: &mut Tokens) -> Self {
         let start = tokens.start();
         let mut lhs = Expr::parse_unop(tokens);
-        let is_sum_sym = |sym| matches!(sym, Symbol::Plus | Symbol::Minus);
-        while let Some((op, span)) = tokens.peek_and_expect_symbol_of(is_sum_sym) {
+        while let Some((op, span)) = tokens.peek_and_expect_symbol_of(|sym| sym == Symbol::Power) {
             let rhs = Expr::parse_unop(tokens);
+
+            // Check if LHS is an unary prefix operator, and issue a warning 
+            // if so (since unary prefixes are ambiguous, as the mathematical 
+            // parse for `-2 ** 5` would be `-(2 ** 5)`, but like, who is 
+            // expecting that to happen)
+            if let Expr::Call { ref args, op: Some((_, prev_span)), .. } = lhs {
+                // We differentiate between unary and binary operators based on 
+                // argument count :-)
+                if args.len() == 1 {
+                    tokens.messages().add(
+                        Message::new_error(
+                            "unary prefix operators with power operators are ambiguous \
+                            (`-a ** b` might be `-(a ** b)` or `(-a) ** b`)",
+                            prev_span
+                        ).with_hint("add parentheses to resolve the ambiguity", None)
+                    );
+                }
+            } 
+
+            let func_name = tokens.names().builtin_binop_name(op);
+            lhs = Expr::Call {
+                target: Box::from(Expr::Ident(Ident(func_name, span))),
+                args: vec![(None, lhs), (None, rhs)],
+                op: Some((op, span)),
+                span: tokens.span_from(start)
+            }
+        }
+        lhs
+    }
+    fn parse_binop_mul(tokens: &mut Tokens) -> Self {
+        let start = tokens.start();
+        let mut lhs = Expr::parse_binop_power(tokens);
+        let is_sum_sym = |sym| matches!(sym, Symbol::Mul | Symbol::Div | Symbol::Mod);
+        while let Some((op, span)) = tokens.peek_and_expect_symbol_of(is_sum_sym) {
+            let rhs = Expr::parse_binop_power(tokens);
             let func_name = tokens.names().builtin_binop_name(op);
             lhs = Expr::Call {
                 target: Box::from(Expr::Ident(Ident(func_name, span))),
@@ -307,5 +341,5 @@ fn test_binop() {
             ),
             Expr::Int(6, Span::zero(id)),
         ),
-);
+    );
 }
