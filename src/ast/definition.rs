@@ -1,7 +1,7 @@
 
 use crate::{
-    ast::expr::{Expr, Ident, TyExpr},
-    entities::{names::MISSING_NAME},
+    ast::expr::{Expr, TyExpr},
+    entities::messages::Message,
     tokens::{token::Symbol, tokenstream::Tokens}
 };
 
@@ -11,7 +11,7 @@ impl Expr {
 
         // Variable definition
         if tokens.peek_and_expect_symbol(Symbol::Let) {
-            let name = Expr::parse_name(tokens);
+            let name = tokens.expect_ident();
             let ty = tokens.peek_and_expect_symbol(Symbol::Colon)
                 .then(|| TyExpr::parse(tokens));
             let value = tokens.peek_and_expect_symbol(Symbol::Assign)
@@ -25,8 +25,13 @@ impl Expr {
         match Self::try_parse_definition(tokens) {
             Some(v) => v,
             None => {
-                let span = tokens.expected("definition");
-                Expr::Ident(Ident(MISSING_NAME, span))
+                let start = tokens.start();
+                // They probably tried to write an expr, so parsing one should 
+                // result in less errors overall
+                let bad_expr = Self::parse(tokens);
+                let span = tokens.span_from(start);
+                tokens.messages().add(Message::new_error("only definitions may appear here", span));
+                bad_expr
             }
         }
     }

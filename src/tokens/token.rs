@@ -100,8 +100,12 @@ pub enum Symbol {
     Dot,
     #[strum(to_string="...")]
     DotDotDot,
+    #[strum(to_string=",")]
+    Comma,
     #[strum(to_string=";")]
     Semicolon,
+    #[strum(to_string="!")]
+    Exclamation,
 }
 
 #[derive(Debug)]

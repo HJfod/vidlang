@@ -1,14 +1,15 @@
 use std::fmt::Display;
 
-use crate::{entities::{codebase::Span, messages::{Message, Messages}, names::{MISSING_NAME, Names}}, tokens::token::{BracketType, Symbol, Token}};
+use crate::{ast::expr::Ident, entities::{codebase::Span, messages::{Message, Messages}, names::{MISSING_NAME, Names}}, lookahead_iter::Looakhead, tokens::token::{BracketType, Symbol, Token}};
 use concat_idents::concat_idents;
 
 // Realistically most of our file is already in one big Vec<Token> anyway because 
 // of brackets containing subtrees so might as well make it all a big Vec<Token>
 #[derive(Debug)]
 pub struct Tokens {
-    iter: std::vec::IntoIter<Token>,
-    peeked: Option<Token>,
+    // Some constructs (arrow functions, named call args) require two tokens 
+    // of lookahead to parse without backtracking
+    iter: Looakhead<std::vec::IntoIter<Token>, 2>,
     last_span: Span,
     eof_name: String,
     names: Names,
@@ -17,10 +18,8 @@ pub struct Tokens {
 
 impl Tokens {
     pub fn new<S: Display>(tks: Vec<Token>, eof_name: S, first_span: Span, names: Names, messages: Messages) -> Self {
-        let mut iter = tks.into_iter();
         Self {
-            peeked: iter.next(),
-            iter,
+            iter: Looakhead::new(tks.into_iter()),
             last_span: first_span,
             eof_name: eof_name.to_string(),
             names,
@@ -28,11 +27,30 @@ impl Tokens {
         }
     }
     pub fn peek(&self) -> Option<&Token> {
-        self.peeked.as_ref()
+        self.iter.lookahead(0)
+    }
+    pub fn peek_n(&self, index: usize) -> Option<&Token> {
+        self.iter.lookahead(index)
+    }
+
+    pub fn peek_ident(&self) -> bool {
+        self.peek().is_some_and(|p| matches!(p, Token::Ident(..)))
+    }
+    pub fn expect_ident(&mut self) -> Ident {
+        let tk = self.next();
+        if let Some(Token::Ident(name, span)) = tk {
+            return Ident(name, span);
+        }
+        self.messages.add(Message::expected(
+            "identifier",
+            tk.as_ref().map(|t| t.expected_name()).unwrap_or(&self.eof_name),
+            tk.as_ref().map(|t| t.span()).unwrap_or(self.last_span)
+        ));
+        Ident(MISSING_NAME, self.last_span)
     }
 
     pub fn peek_symbol(&self, symbol: Symbol) -> bool {
-        self.peeked.as_ref().is_some_and(|p| match p {
+        self.peek().is_some_and(|p| match p {
             Token::Symbol(sym, _) => *sym == symbol,
             _ => false,
         })
@@ -61,7 +79,7 @@ impl Tokens {
     pub fn peek_and_expect_symbol_of<F>(&mut self, matches: F) -> Option<(Symbol, Span)>
         where F: Fn(Symbol) -> bool
     {
-        if self.peeked.as_ref().is_some_and(|p| match p {
+        if self.peek().is_some_and(|p| match p {
             Token::Symbol(sym, _) => matches(*sym),
             _ => false,
         }) {
@@ -74,7 +92,7 @@ impl Tokens {
     }
 
     pub fn peek_bracketed(&self, ty: BracketType) -> bool {
-        self.peeked.as_ref().is_some_and(|p| match p {
+        self.peek().is_some_and(|p| match p {
             Token::Bracketed(bty, _, _) => *bty == ty,
             _ => false,
         })
@@ -116,13 +134,13 @@ impl Tokens {
     }
 
     pub fn expect_empty(&self) {
-        if let Some(ref p) = self.peeked {
+        if let Some(p) = self.peek() {
             self.messages.add(Message::expected(&self.eof_name, p.expected_name(), p.span()));
         }
     }
 
     pub fn start(&self) -> usize {
-        self.peeked.as_ref().map(|p| p.span()).unwrap_or(self.last_span).start()
+        self.peek().map(|p| p.span()).unwrap_or(self.last_span).start()
     }
     pub fn span_from(&self, start: usize) -> Span {
         self.last_span.extend_from(start)
@@ -153,7 +171,7 @@ macro_rules! impl_tokens_expect {
         concat_idents!(__peek_name = peek_, $name {
             impl Tokens {
                 pub fn __peek_name(&self) -> bool {
-                    matches!(self.peeked, Some($pat))
+                    matches!(self.peek(), Some($pat))
                 }
             }
         });
@@ -188,13 +206,12 @@ macro_rules! impl_tokens_expect {
 impl_tokens_expect!(int, Int, 0);
 impl_tokens_expect!(float, Float, 0.0);
 impl_tokens_expect!(str, String, vec![]);
-impl_tokens_expect!(ident, Ident, MISSING_NAME);
 impl_tokens_expect!(attr, Token::Attribute(_, _, _), |span| Token::Attribute(MISSING_NAME, None, span));
 
 impl Iterator for Tokens {
     type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
-        match std::mem::replace(&mut self.peeked, self.iter.next()) {
+        match self.iter.next() {
             Some(tk) => {
                 self.last_span = tk.span().next_ch();
                 Some(tk)

@@ -5,26 +5,31 @@ use crate::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum StringComp {
     String(String),
     Expr(Expr),
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum TyExpr {
     Named(NameId, Span),
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Ident(pub NameId, pub Span);
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum LogicChainType {
     And,
     Or,
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum Expr {
     // Literals
     Int(u64, Span),
@@ -44,7 +49,7 @@ pub enum Expr {
     Call {
         target: Box<Expr>,
         args: Vec<(Option<Ident>, Expr)>,
-        op: Option<Symbol>,
+        op: Option<(Symbol, Span)>,
         span: Span,
     },
     // `a.b`
@@ -57,7 +62,7 @@ pub enum Expr {
     Assign {
         target: Box<Expr>,
         value: Box<Expr>,
-        op: Option<Symbol>,
+        op: (Symbol, Span),
         span: Span,
     },
     // `a and b and c`
@@ -84,23 +89,38 @@ impl Expr {
     }
     pub fn requires_semicolon(&self) -> bool {
         match self {
-            Self::Int(_, _) => true,
-            Self::Float(_, _) => true,
-            Self::String(_, _) => true,
-            Self::Ident(_) => true,
+            Self::Int(..) => true,
+            Self::Float(..) => true,
+            Self::String(..) => true,
+            Self::Ident(..) => true,
 
-            Self::VarDef { name: _, ty: _, value: _, span: _ } => true,
+            Self::VarDef { .. } => true,
 
-            Self::Call { target: _, args: _, op: _, span: _ } => true,
-            Self::FieldAccess { target: _, field: _, span: _ } => true,
-            Self::Assign { target: _, value: _, op: _, span: _ } => true,
-            Self::LogicChain { values: _, ty: _, span: _ } => true,
+            Self::Call { .. } => true,
+            Self::FieldAccess { .. } => true,
+            Self::Assign { .. } => true,
+            Self::LogicChain { .. } => true,
 
-            Self::If { clause: _, truthy, falsy, span: _ } =>
+            Self::If { truthy, falsy, .. } =>
                 falsy.as_ref()
                     .map(|f| f.requires_semicolon())
                     .unwrap_or(truthy.requires_semicolon()),
-            Self::Block(_, _) => false,
+            Self::Block(..) => false,
+        }
+    }
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Int(_, span) => *span,
+            Expr::Float(_, span) => *span,
+            Expr::String(_, span) => *span,
+            Expr::Ident(ident) => ident.1,
+            Expr::VarDef { span, .. } => *span,
+            Expr::Call { span, .. } => *span,
+            Expr::FieldAccess { span, .. } => *span,
+            Expr::Assign { span, .. } => *span,
+            Expr::LogicChain { span, .. } => *span,
+            Expr::If { span, .. } => *span,
+            Expr::Block(_, span) => *span,
         }
     }
 }
@@ -111,6 +131,9 @@ impl Ast {
     pub fn parse(tokens: &mut Tokens) -> Ast {
         Ast(Expr::parse_semicolon_list(Expr::parse_definition, tokens))
     }
+    pub fn exprs(&self) -> &[Expr] {
+        &self.0
+    }
 }
 
 #[test]
@@ -118,23 +141,61 @@ fn test_parse() {
     use crate::entities::codebase::Codebase;
     use crate::entities::names::Names;
     use crate::entities::messages::Messages;
-    use std::assert_matches;
 
     let mut codebase = Codebase::new();
     let names = Names::new();
     let messages = Messages::new();
 
     let id = codebase.add_memory("test_parse", r#"
-        let x = 0;
+        let x = 8;
         if x > 5 {
-            x += 1;
+            x += hi_guys();
         }
     "#);
-    codebase.parse_all(names, messages.clone());
-    assert!(messages.count_total() == 0);
+    codebase.parse_all(names.clone(), messages.clone());
+    assert_eq!(
+        messages.count_total(), 0,
+        "messages was not empty:\n{}", messages.to_test_string(&codebase)
+    );
 
     let ast_exprs = &codebase.fetch(id).ast().unwrap().0;
     assert_eq!(ast_exprs.len(), 2);
 
-    assert_matches!(&ast_exprs[0], Expr::VarDef { name: _, ty: None, value: Some(_), span: _ });
+    assert_eq!(*ast_exprs, vec![
+        Expr::VarDef {
+            name: Ident(names.add("x"), Span::zero(id)),
+            ty: None,
+            value: Some(Box::from(Expr::Int(8, Span::zero(id)))),
+            span: Span::zero(id),
+        },
+        Expr::If {
+            clause: Box::from(Expr::Call {
+                target: Box::from(Expr::Ident(Ident(
+                    names.builtin_binop_name(Symbol::More),
+                    Span::zero(id)
+                ))),
+                args: vec![
+                    (None, Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
+                    (None, Expr::Int(5, Span::zero(id))),
+                ],
+                op: Some((Symbol::More, Span::zero(id))),
+                span: Span::zero(id)
+            }),
+            truthy: Box::from(Expr::Block(vec![
+                Expr::Assign {
+                    target: Box::from(Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
+                    value: Box::from(Expr::Call {
+                        target: Box::from(Expr::Ident(Ident(names.add("hi_guys"), Span::zero(id)))),
+                        args: vec![],
+                        op: None,
+                        span: Span::zero(id)
+                    }),
+                    op: (Symbol::AddAssign, Span::zero(id)),
+                    span: Span::zero(id)
+                }
+            ], Span::zero(id))),
+            falsy: None,
+            span: Span::zero(id)
+        }
+    ]);
 }

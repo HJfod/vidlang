@@ -1,7 +1,7 @@
 use std::{ffi::OsStr, fs::{self, read_to_string}, path::{Path, PathBuf}, range::Range, str::Chars};
 
 use crate::{
-    ast::expr::Ast, entities::{messages::{Message, MessageLevel, Messages}, names::Names}, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}
+    ast::expr::Ast, entities::{messages::{Message, MessageLevel, Messages}, names::Names}, lookahead_iter::Looakhead, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}
 };
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -72,27 +72,23 @@ impl Module {
     }
 }
 
-const SRC_ITERATOR_PEEK_WINDOW: usize = 3;
-
 pub struct SrcIterator<'s> {
     id: ModId,
-    inner: Chars<'s>,
-    index: usize,
     // We need three characters of lookahead for distinguishing doc comments 
     // '///' from normal comments '//'
-    peek: [Option<char>; SRC_ITERATOR_PEEK_WINDOW],
+    iter: Looakhead<Chars<'s>, 3>,
+    index: usize,
     // This is for better errors
     last_nonspace_index: usize,
 }
 
 impl<'s> SrcIterator<'s> {
-    fn new(id: ModId, mut chars: Chars<'s>) -> Self {
+    fn new(id: ModId, chars: Chars<'s>) -> Self {
         Self {
             id,
-            peek: std::array::from_fn(|_| chars.next()),
+            iter: Looakhead::new(chars),
             index: 0,
             last_nonspace_index: 0,
-            inner: chars,
         }
     }
     pub fn next_while<F: Fn(char) -> bool>(&mut self, pred: F) -> String {
@@ -103,10 +99,10 @@ impl<'s> SrcIterator<'s> {
         result
     }
     pub fn peek(&self) -> Option<char> {
-        self.peek[0]
+        self.iter.lookahead(0).copied()
     }
     pub fn peek_n(&self, n: usize) -> Option<char> {
-        self.peek[n]
+        self.iter.lookahead(n).copied()
     }
     pub fn index(&self) -> usize {
         self.index
@@ -122,8 +118,7 @@ impl<'s> SrcIterator<'s> {
 impl<'s> Iterator for SrcIterator<'s> {
     type Item = char;
     fn next(&mut self) -> Option<Self::Item> {
-        self.peek.rotate_left(1);
-        let ret = std::mem::replace(&mut self.peek[SRC_ITERATOR_PEEK_WINDOW - 1], self.inner.next());
+        let ret = self.iter.next();
         if let Some(c) = ret {
             self.index += 1;
             if !c.is_whitespace() {
@@ -228,6 +223,10 @@ impl Codebase {
 pub struct Span(ModId, Range<usize>);
 
 impl Span {
+    #[cfg(test)]
+    pub fn zero(id: ModId) -> Self {
+        Self(id, (0..0).into())
+    }
     pub fn next_ch(self) -> Span {
         Span(self.0, (self.1.end..(self.1.end + 1)).into())
     }
@@ -245,6 +244,15 @@ impl Span {
     }
     pub fn extend_from(self, start: usize) -> Span {
         Span(self.0, (start..self.1.end).into())
+    }
+}
+
+// For tests, Span must be PartialEq (to check that asts match) but it should 
+// just always resolve to true since we don't care
+#[cfg(test)]
+impl PartialEq for Span {
+    fn eq(&self, _other: &Self) -> bool {
+        true
     }
 }
 

@@ -6,6 +6,7 @@ use crate::{entities::{messages::Messages, names::Names, codebase::Codebase}};
 mod ast;
 mod entities;
 mod tokens;
+mod lookahead_iter;
 
 #[derive(Debug, Parser)]
 struct CliArgs {

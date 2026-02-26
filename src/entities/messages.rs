@@ -65,6 +65,14 @@ impl Message {
         self.notes.push(Note { level: NoteLevel::Note, text: msg.to_string(), span });
         self
     }
+    pub fn with_note_if<S, F>(mut self, msg: F) -> Self
+        where S: Display, F: Fn() -> Option<(S, Option<Span>)>
+    {
+        if let Some((text, span)) = msg() {
+            self.notes.push(Note { level: NoteLevel::Note, text: text.to_string(), span });
+        }
+        self
+    }
     pub fn with_hint<S: Display>(mut self, msg: S, span: Option<Span>) -> Self {
         self.notes.push(Note { level: NoteLevel::Hint, text: msg.to_string(), span });
         self
@@ -101,7 +109,7 @@ impl Messages {
     pub fn count_total(&self) -> usize {
         self.messages.lock().unwrap().len()
     }
-    pub fn release<F: Fn(&str)>(&self, codebase: &Codebase, releaser: F) {
+    pub fn release<F: FnMut(&str)>(&self, codebase: &Codebase, mut releaser: F) {
         let m = self.messages.lock().unwrap();
         for msg in m.iter() {
             let mut formatted = String::new();
@@ -115,5 +123,14 @@ impl Messages {
             formatted.push_str(&msg.text);
             releaser(&formatted);
         }
+    }
+    #[cfg(test)]
+    pub fn to_test_string(&self, codebase: &Codebase) -> String {
+        let mut res = String::new();
+        self.release(codebase, |s| {
+            res.push_str(s);
+            res.push('\n');
+        });
+        res
     }
 }

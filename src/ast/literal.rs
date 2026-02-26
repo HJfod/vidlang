@@ -6,16 +6,6 @@ use crate::{
 }};
 
 impl Expr {
-    pub(super) fn parse_name(tokens: &mut Tokens) -> Ident {
-        if tokens.peek_ident() {
-            let Token::Ident(name, span) = tokens.expect_ident() else {
-                unreachable!("tokens.peek_ident() returned true but expect_ident() did not return an ident");
-            };
-            return Ident(name, span);
-        }
-        let span = tokens.expected("identifier");
-        Ident(MISSING_NAME, span)
-    }
     pub(super) fn parse_literal(tokens: &mut Tokens) -> Expr {
         if tokens.peek_int() {
             let Token::Int(num, span) = tokens.expect_int() else {
@@ -44,6 +34,9 @@ impl Expr {
                 }).collect(),
                 span
             );
+        }
+        if tokens.peek_ident() {
+            return Expr::Ident(tokens.expect_ident());
         }
         let span = tokens.expected("expression");
         Expr::Ident(Ident(MISSING_NAME, span))
