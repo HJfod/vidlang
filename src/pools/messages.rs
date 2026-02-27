@@ -1,6 +1,6 @@
 use std::{fmt::Display, sync::{Arc, Mutex}};
 
-use crate::entities::codebase::{Codebase, Span};
+use crate::pools::codebase::{Codebase, Span};
 
 #[derive(Debug)]
 pub enum NoteLevel {

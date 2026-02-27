@@ -1,7 +1,7 @@
 
 use crate::{
     ast::expr::{Expr, ParseArgs},
-    entities::messages::Message,
+    pools::{exprs::{ExprId, Exprs}, messages::Message},
     tokens::{token::{Symbol, Token}, tokenstream::Tokens}
 };
 
@@ -9,13 +9,14 @@ impl Expr {
     pub(super) fn parse_semicolon_expr_list(
         tokens: &mut Tokens,
         only_definitions: bool,
+        exprs: Exprs,
         args: ParseArgs,
-    ) -> Vec<Expr> {
-        let mut exprs = Vec::new();
+    ) -> Vec<ExprId> {
+        let mut list = Vec::new();
         let parse = if only_definitions { Expr::parse_definition } else { Expr::parse };
         while tokens.peek().is_some() {
-            let mut expr = parse(tokens, args);
-            let requires_semicolon = expr.requires_semicolon();
+            let mut expr = parse(tokens, exprs.clone(), args);
+            let requires_semicolon = exprs.exec(expr, |e| e.requires_semicolon(exprs.clone()));
 
             if requires_semicolon {
                 // For error recovery reasons, do not consume unless we 
@@ -34,13 +35,13 @@ impl Expr {
                         }
                         // Last statement is transformed into `yield x`
                         else {
-                            let span = expr.span();
-                            expr = Expr::Yield(Box::from(expr), span);
+                            let span = exprs.exec(expr, |e| e.span());
+                            expr = exprs.add(Expr::Yield(expr, span));
                         }
                     }
                 }
             }
-            exprs.push(expr);
+            list.push(expr);
 
             // Consume any additional semicolons and warn about them
             let too_many_semicolons_start = tokens.start();
@@ -55,9 +56,9 @@ impl Expr {
                 ));
             }
         }
-        exprs
+        list
     }
-    pub(super) fn parse_comma(tokens: &mut Tokens, _args: ParseArgs) {
+    pub(super) fn parse_comma(tokens: &mut Tokens, _exprs: Exprs, _args: ParseArgs) {
         // For error recovery reasons, do not consume unless we 
         // actually got a comma
         match tokens.peek() {
@@ -76,18 +77,19 @@ impl Expr {
     pub(super) fn parse_comma_list<F, T>(
         parse_item: F,
         tokens: &mut Tokens,
+        exprs: Exprs,
         args: ParseArgs,
     ) -> Vec<T>
-        where F: Fn(&mut Tokens, ParseArgs) -> T
+        where F: Fn(&mut Tokens, Exprs, ParseArgs) -> T
     {
         let mut items = Vec::new();
         while tokens.peek().is_some() {
-            items.push(parse_item(tokens, args));
+            items.push(parse_item(tokens, exprs.clone(), args));
             // Don't require trailing comma
             if tokens.peek().is_none() {
                 break;
             }
-            Expr::parse_comma(tokens, args);
+            Expr::parse_comma(tokens, exprs.clone(), args);
         }
         items
     }

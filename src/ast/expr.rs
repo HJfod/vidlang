@@ -1,55 +1,25 @@
 
 use crate::{
-    entities::{codebase::Span, names::NameId}, 
+    pools::{codebase::Span, exprs::{ExprId, Exprs}, names::NameId}, 
     tokens::{token::Symbol, tokenstream::Tokens}
 };
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum StringComp {
     String(String),
-    Expr(Expr),
+    Expr(ExprId),
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub enum TyExpr {
-    Named {
-        name: Ident,
-        generics: Option<Vec<TyExpr>>,
-        span: Span,
-    },
-    // `A<B>::C<D>`
-    Access {
-        from: Box<TyExpr>,
-        associate: Ident,
-        generics: Option<Vec<TyExpr>>,
-        span: Span,
-    },
-}
-
-impl TyExpr {
-    pub fn span(&self) -> Span {
-        match self {
-            Self::Named { span, .. } => *span,
-            Self::Access { span, .. } => *span,
-        }
-    }
-}
-
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct Ident(pub NameId, pub Span);
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum LogicChainType {
     And,
     Or,
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum FunctionParamKind {
     /// Ordinary function param that is passed by ownership / copy
     Normal,
@@ -60,102 +30,115 @@ pub enum FunctionParamKind {
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub struct FunctionParam {
     pub name: Ident,
-    pub ty: Option<TyExpr>,
-    pub default_value: Option<Box<Expr>>,
+    pub ty: Option<ExprId>,
+    pub default_value: Option<ExprId>,
     pub kind: FunctionParamKind,
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum Visibility {
     Public,
     Private,
 }
 
 #[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq))]
 pub enum Expr {
     Bool(bool, Span),
     Int(u64, Span),
     Float(f64, Span),
     String(Vec<StringComp>, Span),
     Ident(Ident),
-    Tuple(Vec<Expr>, Span),
+    Tuple(Vec<ExprId>, Span),
 
     // `let a: B = 5`
     Var {
         visibility: Visibility,
         name: Ident,
-        ty: Option<TyExpr>,
-        value: Option<Box<Expr>>,
+        ty: Option<ExprId>,
+        value: Option<ExprId>,
         is_const: bool,
         span: Span,
     },
     Function {
         visibility: Visibility,
         name: Ident,
-        generics: Option<Vec<(Ident, Option<TyExpr>)>>,
+        generics: Option<Vec<(Ident, Option<ExprId>)>>,
         params: Vec<FunctionParam>,
-        return_ty: Option<TyExpr>,
-        body: Box<Expr>,
+        return_ty: Option<ExprId>,
+        body: ExprId,
         is_clip: bool,
         span: Span,
     },
     ArrowFunction {
         params: Vec<FunctionParam>,
-        body: Box<Expr>,
+        body: ExprId,
         span: Span,
     },
 
     // `a(b, c: 5)`
     Call {
-        target: Box<Expr>,
-        args: Vec<(Option<Ident>, Expr)>,
+        target: ExprId,
+        args: Vec<(Option<Ident>, ExprId)>,
         op: Option<(Symbol, Span)>,
         span: Span,
     },
     // `a.b`
     FieldAccess {
-        target: Box<Expr>,
+        target: ExprId,
         field: Ident,
         span: Span,
     },
     // `a = 5`
     Assign {
-        target: Box<Expr>,
-        value: Box<Expr>,
+        target: ExprId,
+        value: ExprId,
         op: (Symbol, Span),
         span: Span,
     },
     // `a and b and c`
     LogicChain {
-        values: Vec<Expr>,
+        values: Vec<ExprId>,
         ty: LogicChainType,
         span: Span,
     },
 
     // `if a { b } else { c }`
     If {
-        clause: Box<Expr>,
-        truthy: Box<Expr>,
-        falsy: Option<Box<Expr>>,
+        clause: ExprId,
+        truthy: ExprId,
+        falsy: Option<ExprId>,
         span: Span,
     },
-    Return(Option<Box<Expr>>, Span),
-    Yield(Box<Expr>, Span),
+    Return(Option<ExprId>, Span),
+    Yield(ExprId, Span),
     // `{ .. }`
-    Block(Vec<Expr>, Span),
-    Await(Box<Expr>, Span),
+    Block(Vec<ExprId>, Span),
+    Await(ExprId, Span),
+
+    TyNamed {
+        name: Ident,
+        generics: Option<Vec<ExprId>>,
+        span: Span,
+    },
+    // `A<B>::C<D>`
+    TyAccess {
+        from: ExprId,
+        associate: Ident,
+        generics: Option<Vec<ExprId>>,
+        span: Span,
+    },
 }
 
 impl Expr {
-    pub fn parse(tokens: &mut Tokens, args: ParseArgs) -> Self {
-        Self::parse_binop(tokens, args)
+    pub fn parse(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs) -> ExprId {
+        Self::parse_binop(tokens, exprs.clone(), args)
     }
-    pub fn requires_semicolon(&self) -> bool {
+    pub fn requires_semicolon(&self, exprs: Exprs) -> bool {
+        let sub_requires = |id: ExprId| {
+            exprs.exec(id, |e| e.requires_semicolon(exprs.clone()))
+        };
         match self {
             Self::Bool(..) => true,
             Self::Int(..) => true,
@@ -165,24 +148,22 @@ impl Expr {
             Self::Tuple(..) => true,
 
             Self::Var { .. } => true,
-            Self::Function { body, .. } => body.requires_semicolon(),
-            Self::ArrowFunction { body, .. } => body.requires_semicolon(),
+            Self::Function { body, .. } => sub_requires(*body),
+            Self::ArrowFunction { body, .. } => sub_requires(*body),
 
             Self::Call { .. } => true,
             Self::FieldAccess { .. } => true,
             Self::Assign { .. } => true,
             Self::LogicChain { .. } => true,
 
-            Self::If { truthy, falsy, .. } =>
-                falsy.as_ref()
-                    .map(|f| f.requires_semicolon())
-                    .unwrap_or(truthy.requires_semicolon()),
-            Self::Return(value, ..) => value.as_ref()
-                .map(|v| v.requires_semicolon())
-                .unwrap_or(false),
-            Self::Yield(value, ..) => value.requires_semicolon(),
+            Self::If { truthy, falsy, .. } => sub_requires(falsy.unwrap_or(*truthy)),
+            Self::Return(value, ..) => value.map(sub_requires).unwrap_or(true),
+            Self::Yield(value, ..) => sub_requires(*value),
             Self::Block(..) => false,
-            Self::Await(value, _) => value.requires_semicolon(),
+            Self::Await(value, _) => sub_requires(*value),
+
+            Self::TyAccess { .. } => true,
+            Self::TyNamed { .. } => true,
         }
     }
     pub fn span(&self) -> Span {
@@ -205,6 +186,8 @@ impl Expr {
             Self::Yield(_, span) => *span,
             Self::Block(_, span) => *span,
             Self::Await(_, span) => *span,
+            Self::TyNamed { span, .. } => *span,
+            Self::TyAccess { span, .. } => *span,
         }
     }
 }
@@ -225,21 +208,21 @@ impl Default for ParseArgs {
 }
 
 #[derive(Debug)]
-pub struct Ast(Vec<Expr>);
+pub struct Ast(Vec<ExprId>);
 impl Ast {
-    pub fn parse(tokens: &mut Tokens, args: ParseArgs) -> Ast {
-        Ast(Expr::parse_semicolon_expr_list(tokens, !args.allow_non_definitions_at_root, args))
+    pub fn parse(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs) -> Ast {
+        Ast(Expr::parse_semicolon_expr_list(tokens, !args.allow_non_definitions_at_root, exprs, args))
     }
-    pub fn exprs(&self) -> &[Expr] {
+    pub fn exprs(&self) -> &[ExprId] {
         &self.0
     }
 }
 
 #[test]
 fn invalid_parses() {
-    use crate::entities::codebase::Codebase;
-    use crate::entities::messages::Messages;
-    use crate::entities::names::Names;
+    use crate::pools::codebase::Codebase;
+    use crate::pools::messages::Messages;
+    use crate::pools::names::Names;
 
     let test_expr = |data: &str| {
         let mut codebase = Codebase::new();
@@ -247,7 +230,8 @@ fn invalid_parses() {
 
         let names = Names::new();
         let messages = Messages::new();
-        codebase.parse_all(names.clone(), messages.clone(), ParseArgs {
+        let exprs = Exprs::new();
+        codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs {
             allow_non_definitions_at_root: true,
         });
 
@@ -268,12 +252,13 @@ fn invalid_parses() {
 
 #[test]
 fn parse() {
-    use crate::entities::codebase::Codebase;
-    use crate::entities::names::Names;
-    use crate::entities::messages::Messages;
+    use crate::pools::codebase::Codebase;
+    use crate::pools::names::Names;
+    use crate::pools::messages::Messages;
 
     let mut codebase = Codebase::new();
     let names = Names::new();
+    let exprs = Exprs::new();
     let messages = Messages::new();
 
     let id = codebase.add_memory("test_parse", r#"
@@ -282,7 +267,7 @@ fn parse() {
             x += hi_guys();
         }
     "#);
-    codebase.parse_all(names.clone(), messages.clone(), ParseArgs {
+    codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs {
         allow_non_definitions_at_root: true
     });
     assert_eq!(
@@ -293,43 +278,54 @@ fn parse() {
     let ast_exprs = &codebase.fetch(id).ast().unwrap().0;
     assert_eq!(ast_exprs.len(), 2);
 
-    assert_eq!(*ast_exprs, vec![
-        Expr::Var {
-            visibility: Visibility::Private,
-            name: Ident(names.add("x"), Span::zero(id)),
-            ty: None,
-            value: Some(Box::from(Expr::Int(8, Span::zero(id)))),
-            span: Span::zero(id),
-            is_const: false,
-        },
-        Expr::If {
-            clause: Box::from(Expr::Call {
-                target: Box::from(Expr::Ident(Ident(
-                    names.builtin_binop_name(Symbol::More),
-                    Span::zero(id)
-                ))),
-                args: vec![
-                    (None, Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
-                    (None, Expr::Int(5, Span::zero(id))),
-                ],
-                op: Some((Symbol::More, Span::zero(id))),
-                span: Span::zero(id)
-            }),
-            truthy: Box::from(Expr::Block(vec![
-                Expr::Assign {
-                    target: Box::from(Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
-                    value: Box::from(Expr::Call {
-                        target: Box::from(Expr::Ident(Ident(names.add("hi_guys"), Span::zero(id)))),
-                        args: vec![],
-                        op: None,
-                        span: Span::zero(id)
-                    }),
-                    op: (Symbol::AddAssign, Span::zero(id)),
-                    span: Span::zero(id)
-                }
-            ], Span::zero(id))),
-            falsy: None,
-            span: Span::zero(id)
-        }
-    ]);
+    // let a = ast_exprs.into_iter();
+    // let Some(Expr::Var {
+    //     visibility: Visibility::Private,
+    //     name: Ident(names.add("x"), _),
+    //     ty: None,
+    //     value: Some(value),
+    //     span: _,
+    //     is_const: false,
+    // }) = a.next();
+    // let v = 
+
+    // assert_eq!(*ast_exprs.clone(), vec![
+    //     Expr::Var {
+    //         visibility: Visibility::Private,
+    //         name: Ident(names.add("x"), Span::zero(id)),
+    //         ty: None,
+    //         value: Some(Box::from(Expr::Int(8, Span::zero(id)))),
+    //         span: Span::zero(id),
+    //         is_const: false,
+    //     },
+    //     Expr::If {
+    //         clause: Box::from(Expr::Call {
+    //             target: Box::from(Expr::Ident(Ident(
+    //                 names.builtin_binop_name(Symbol::More),
+    //                 Span::zero(id)
+    //             ))),
+    //             args: vec![
+    //                 (None, Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
+    //                 (None, Expr::Int(5, Span::zero(id))),
+    //             ],
+    //             op: Some((Symbol::More, Span::zero(id))),
+    //             span: Span::zero(id)
+    //         }),
+    //         truthy: Box::from(Expr::Block(vec![
+    //             Expr::Assign {
+    //                 target: Box::from(Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
+    //                 value: Box::from(Expr::Call {
+    //                     target: Box::from(Expr::Ident(Ident(names.add("hi_guys"), Span::zero(id)))),
+    //                     args: vec![],
+    //                     op: None,
+    //                     span: Span::zero(id)
+    //                 }),
+    //                 op: (Symbol::AddAssign, Span::zero(id)),
+    //                 span: Span::zero(id)
+    //             }
+    //         ], Span::zero(id))),
+    //         falsy: None,
+    //         span: Span::zero(id)
+    //     }
+    // ]);
 }

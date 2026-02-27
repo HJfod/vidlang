@@ -1,4 +1,4 @@
-use crate::{ast::expr::Expr, entities::names::NameId};
+use crate::{ast::expr::Expr, pools::names::NameId};
 
 pub enum Ty {
     Bool,
@@ -21,4 +21,12 @@ pub enum Ty {
     /// Type produced by non-exhaustive constructs (i.e. value is never assignable)
     // todo: maybe put all exprs in a pool for stuff like this?
     NonExhaustive(Expr),
+}
+
+pub enum ConstValue {
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    String(String),
+    Tuple(Vec<ConstValue>),
 }

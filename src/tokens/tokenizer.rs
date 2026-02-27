@@ -1,8 +1,8 @@
 
 use std::str::FromStr;
 
-use crate::{entities::{
-    codebase::SrcIterator, messages::{Message, Messages}, names::{MISSING_NAME, Names}
+use crate::{pools::{
+    codebase::SrcIterator, messages::{Message, Messages}, names::Names
 }, tokens::{token::{BracketType, StrLitComp, Symbol, Token}, tokenstream::Tokens}};
 use unicode_xid::UnicodeXID;
 
@@ -219,7 +219,7 @@ impl<'s> Iterator for Tokenizer<'s> {
                 self.messages.add(Message::expected_what(
                     "identifier for attribute", self.iter.head()
                 ));
-                MISSING_NAME
+                self.names.missing()
             };
             // Args for attributes
             let args = self.iter.peek().is_some_and(|c| c == '(').then(|| {
@@ -280,7 +280,7 @@ impl<'s> Iterator for Tokenizer<'s> {
 
 #[test]
 fn strings() {
-    use crate::entities::codebase::Codebase;
+    use crate::pools::codebase::Codebase;
     use std::assert_matches;
 
     let names = Names::new();
@@ -316,7 +316,7 @@ fn strings() {
 
 #[test]
 fn tokenizer() {
-    use crate::entities::codebase::Codebase;
+    use crate::pools::codebase::Codebase;
     let names = Names::new();
     let messages = Messages::new();
     let mut codebase = Codebase::new();

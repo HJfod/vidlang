@@ -1,39 +1,46 @@
 use std::sync::{Arc, Mutex};
-
 use crate::tokens::token::Symbol;
+use string_interner::{self, StringInterner, backend::StringBackend};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NameId(usize);
 
-pub static MISSING_NAME: NameId = NameId(0);
+impl string_interner::Symbol for NameId {
+    fn try_from_usize(index: usize) -> Option<Self> {
+        Some(Self(index))
+    }
+    fn to_usize(self) -> usize {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Names {
-    names: Arc<Mutex<Vec<String>>>,
+    // BufferBackend might be a good choice too since resolving the names will 
+    // be rare and mostly for errors
+    names: Arc<Mutex<StringInterner<StringBackend<NameId>>>>,
 }
 
 impl Names {
     pub fn new() -> Self {
         Self {
-            // First name is always MISSING_NAME
-            names: Arc::from(Mutex::new(vec!["<missing name>".into()]))
+            names: Arc::from(Mutex::new(StringInterner::new()))
         }
     }
     pub fn add(&self, name: &str) -> NameId {
-        let mut names = self.names.lock().unwrap();
-        if let Some((id, _)) = names.iter().enumerate().find(|n| n.1 == name) {
-            return NameId(id);
-        }
-        names.push(name.to_string());
-        NameId(names.len() - 1)
+        self.names.lock().unwrap()
+            .get_or_intern(name)
     }
     pub fn fetch(&self, id: NameId) -> String {
         self.names.lock().unwrap()
-            .get(id.0)
-            .expect("NamePool has apparently handed out an invalid NameId")
-            .clone()
+            .resolve(id)
+            .expect("Names has handed out an invalid NameId (somehow)")
+            .to_string()
     }
 
+    pub fn missing(&self) -> NameId {
+        self.add("<missing name>")
+    }
     pub fn builtin_unop_name(&self, op: Symbol) -> NameId {
         match op {
             // Unary plus is not real (since Rust also doesn't have it and I think 

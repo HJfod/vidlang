@@ -1,12 +1,14 @@
 
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, ParseArgs, TyExpr, Visibility},
-    entities::messages::Message,
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, ParseArgs, Visibility},
+    pools::{exprs::{ExprId, Exprs}, messages::Message},
     tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
-    pub(super) fn parse_function_param(tokens: &mut Tokens, args: ParseArgs) -> FunctionParam {
+    pub(super) fn parse_function_param(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs)
+     -> FunctionParam
+    {
         let kind;
         if tokens.peek_and_expect_symbol(Symbol::Ref) {
             kind = FunctionParamKind::Ref;
@@ -19,13 +21,13 @@ impl Expr {
         }
         let name = tokens.expect_ident();
         let ty = tokens.peek_and_expect_symbol(Symbol::Colon)
-            .then(|| TyExpr::parse(tokens, args));
+            .then(|| Expr::parse_type(tokens, exprs.clone(), args));
         let default_value = tokens.peek_and_expect_symbol(Symbol::Assign)
-            .then(|| Box::from(Expr::parse(tokens, args)));
+            .then(|| Expr::parse(tokens, exprs.clone(), args));
         FunctionParam { kind, name, ty, default_value }
     }
 
-    pub(super) fn try_parse_definition(tokens: &mut Tokens, args: ParseArgs) -> Option<Self> {
+    pub(super) fn try_parse_definition(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs) -> Option<ExprId> {
         let start = tokens.start();
 
         // Get visibility; by default, everything is private
@@ -50,15 +52,15 @@ impl Expr {
         if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(|sym| matches!(sym, Symbol::Let | Symbol::Const)) {
             let name = tokens.expect_ident();
             let ty = tokens.peek_and_expect_symbol(Symbol::Colon)
-                .then(|| TyExpr::parse(tokens, args));
+                .then(|| Expr::parse_type(tokens, exprs.clone(), args));
             let value = tokens.peek_and_expect_symbol(Symbol::Assign)
-                .then(|| Box::from(Expr::parse(tokens, args)));
-            return Some(Expr::Var {
+                .then(|| Expr::parse(tokens, exprs.clone(), args));
+            return Some(exprs.add(Expr::Var {
                 visibility,
                 name, ty, value,
                 span: tokens.span_from(start),
                 is_const: sym == Symbol::Const,
-            });
+            }));
         }
 
         // Function or clip definition
@@ -66,10 +68,10 @@ impl Expr {
             |sym| matches!(sym, Symbol::Function | Symbol::Clip)
         ) {
             let name = tokens.expect_ident();
-            let generics = TyExpr::try_parse_generic_params(tokens, args);
+            let generics = Expr::try_parse_generic_params(tokens, exprs.clone(), args);
             let params = match tokens.expect_bracketed(BracketType::Parentheses) {
                 Token::Bracketed(_, mut params_tokens, _) => Expr::parse_comma_list(
-                    Expr::parse_function_param, &mut params_tokens, args
+                    Expr::parse_function_param, &mut params_tokens, exprs.clone(), args
                 ),
                 _ => vec![],
             };
@@ -83,32 +85,31 @@ impl Expr {
                         ));
                         return None;
                     }
-                    Some(TyExpr::parse(tokens, args))
+                    Some(Expr::parse(tokens, exprs.clone(), args))
                 })
                 .flatten();
 
             // Clips have special wacky types
             if let Some(ref ret) = return_ty && sym == Symbol::Clip {
                 tokens.messages().add(Message::new_error(
-                    "clips may not have explicit return types", ret.span()
+                    "clips may not have explicit return types",
+                    exprs.exec(*ret, |e| e.span())
                 ));
             }
 
             // Shorthand syntax `f() => expr`
-            let body = Box::from(
-                if tokens.peek_and_expect_symbol(Symbol::FatArrow) {
-                    Expr::parse(tokens, args)
-                }
-                else {
-                    Expr::parse_block(tokens, args)
-                }
-            );
-            return Some(Expr::Function {
+            let body = if tokens.peek_and_expect_symbol(Symbol::FatArrow) {
+                Expr::parse(tokens, exprs.clone(), args)
+            }
+            else {
+                Expr::parse_block(tokens, exprs.clone(), args)
+            };
+            return Some(exprs.add(Expr::Function {
                 visibility,
                 name, generics, params, return_ty, body,
                 is_clip: sym == Symbol::Clip,
                 span: tokens.span_from(start)
-            });
+            }));
         }
 
         // If an explicit visibility specifier was used, then we know the user 
@@ -122,14 +123,14 @@ impl Expr {
         
         None
     }
-    pub(super) fn parse_definition(tokens: &mut Tokens, args: ParseArgs) -> Self {
-        match Self::try_parse_definition(tokens, args) {
+    pub(super) fn parse_definition(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs) -> ExprId {
+        match Self::try_parse_definition(tokens, exprs.clone(), args) {
             Some(v) => v,
             None => {
                 let start = tokens.start();
                 // They probably tried to write an expr, so parsing one should 
                 // result in less errors overall
-                let bad_expr = Expr::parse(tokens, args);
+                let bad_expr = Expr::parse(tokens, exprs.clone(), args);
                 let span = tokens.span_from(start);
                 tokens.messages().add(Message::new_error("only definitions may appear here", span));
                 bad_expr
@@ -140,19 +141,20 @@ impl Expr {
 
 #[test]
 fn parse_arrow_function() {
-    use crate::entities::codebase::Codebase;
-    use crate::entities::names::Names;
-    use crate::entities::messages::Messages;
+    use crate::pools::codebase::Codebase;
+    use crate::pools::names::Names;
+    use crate::pools::messages::Messages;
 
     let mut codebase = Codebase::new();
     let names = Names::new();
+    let exprs = Exprs::new();
     let messages = Messages::new();
 
     let _id = codebase.add_memory("parse_arrow_function", r#"
         let x = (a, b) => a + b;
         let y = a => a;
     "#);
-    codebase.parse_all(names.clone(), messages.clone(), ParseArgs {
+    codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs {
         allow_non_definitions_at_root: true
     });
 

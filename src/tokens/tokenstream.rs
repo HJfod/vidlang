@@ -1,6 +1,11 @@
 use std::fmt::Display;
 
-use crate::{ast::expr::Ident, entities::{codebase::Span, messages::{Message, Messages}, names::{MISSING_NAME, Names}}, lookahead_iter::Looakhead, tokens::token::{BracketType, Symbol, Token}};
+use crate::{
+    ast::expr::Ident,
+    pools::{codebase::Span, messages::{Message, Messages}, names::Names},
+    utils::lookahead_iter::Looakhead,
+    tokens::token::{BracketType, Symbol, Token}
+};
 
 // Realistically most of our file is already in one big Vec<Token> anyway because 
 // of brackets containing subtrees so might as well make it all a big Vec<Token>
@@ -66,7 +71,7 @@ impl Tokens {
         ) {
             return Ident(name, span);
         }
-        Ident(MISSING_NAME, self.last_span)
+        Ident(self.names.missing(), self.last_span)
     }
 
     pub fn peek_symbol(&mut self, symbol: Symbol) -> bool {
@@ -193,7 +198,7 @@ impl Iterator for Tokens {
 
 #[test]
 fn tokenizing() {
-    use crate::entities::codebase::Codebase;
+    use crate::pools::codebase::Codebase;
     
     let names = Names::new();
     let messages = Messages::new();

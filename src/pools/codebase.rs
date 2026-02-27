@@ -1,7 +1,10 @@
 use std::{ffi::OsStr, fs::{self, read_to_string}, path::{Path, PathBuf}, range::Range, str::Chars};
 
 use crate::{
-    ast::expr::{Ast, ParseArgs}, entities::{messages::{Message, MessageLevel, Messages}, names::Names}, lookahead_iter::Looakhead, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}
+    ast::expr::{Ast, ParseArgs},
+    utils::lookahead_iter::Looakhead,
+    pools::{exprs::Exprs, messages::{Message, MessageLevel, Messages}, names::Names},
+    tokens::{tokenizer::Tokenizer, tokenstream::Tokens}
 };
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -62,12 +65,12 @@ impl Module {
             messages
         ))
     }
-    pub fn parse(&mut self, names: Names, messages: Messages, args: ParseArgs) -> Option<&Ast> {
+    pub fn parse(&mut self, names: Names, messages: Messages, exprs: Exprs, args: ParseArgs) -> Option<&Ast> {
         if self.ast.is_some() {
             return self.ast.as_ref();
         }
         let mut tokens = self.tokenize(names, messages.clone())?;
-        self.ast = Some(Ast::parse(&mut tokens, args));
+        self.ast = Some(Ast::parse(&mut tokens, exprs.clone(), args));
         self.ast.as_ref()
     }
 }
@@ -212,9 +215,9 @@ impl Codebase {
     pub fn fetch(&self, id: ModId) -> &Module {
         self.modules.get(id.0).expect("Codebase has apparently handed out an invalid ModId")
     }
-    pub fn parse_all(&mut self, names: Names, messages: Messages, args: ParseArgs) {
+    pub fn parse_all(&mut self, names: Names, messages: Messages, exprs: Exprs, args: ParseArgs) {
         for module in &mut self.modules {
-            module.parse(names.clone(), messages.clone(), args);
+            module.parse(names.clone(), messages.clone(), exprs.clone(), args);
         }
     }
 }
