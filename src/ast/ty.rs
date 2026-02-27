@@ -1,8 +1,8 @@
-use crate::{ast::expr::{Expr, Ident, ParseArgs}, pools::exprs::{ExprId, Exprs}, tokens::{token::Symbol, tokenstream::Tokens}};
+use crate::{ast::expr::{Expr, GenericParam, ParseArgs}, pools::exprs::{ExprId, Exprs}, tokens::{token::Symbol, tokenstream::Tokens}};
 
 impl Expr {
     pub(super) fn try_parse_generic_params(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs)
-        -> Option<Vec<(Ident, Option<ExprId>)>>
+        -> Option<Vec<GenericParam>>
     {
         if !tokens.peek_and_expect_symbol(Symbol::Less) {
             return None;
@@ -12,7 +12,7 @@ impl Expr {
             let name = tokens.expect_ident();
             let constraint = tokens.peek_and_expect_symbol(Symbol::Colon)
                 .then(|| Expr::parse_type(tokens, exprs.clone(), args));
-            generics.push((name, constraint));
+            generics.push(GenericParam { name, constraint });
             
             // This allows a trailing comma
             if tokens.peek_symbol(Symbol::More) {

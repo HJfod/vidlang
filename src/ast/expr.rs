@@ -38,6 +38,12 @@ pub struct FunctionParam {
 }
 
 #[derive(Debug)]
+pub struct GenericParam {
+    pub name: Ident,
+    pub constraint: Option<ExprId>,
+}
+
+#[derive(Debug)]
 pub enum Visibility {
     Public,
     Private,
@@ -64,7 +70,7 @@ pub enum Expr {
     Function {
         visibility: Visibility,
         name: Ident,
-        generics: Option<Vec<(Ident, Option<ExprId>)>>,
+        generics: Option<Vec<GenericParam>>,
         params: Vec<FunctionParam>,
         return_ty: Option<ExprId>,
         body: ExprId,
@@ -255,6 +261,7 @@ fn parse() {
     use crate::pools::codebase::Codebase;
     use crate::pools::names::Names;
     use crate::pools::messages::Messages;
+    use crate::utils::tests::DebugAstEq;
 
     let mut codebase = Codebase::new();
     let names = Names::new();
@@ -278,54 +285,46 @@ fn parse() {
     let ast_exprs = &codebase.fetch(id).ast().unwrap().0;
     assert_eq!(ast_exprs.len(), 2);
 
-    // let a = ast_exprs.into_iter();
-    // let Some(Expr::Var {
-    //     visibility: Visibility::Private,
-    //     name: Ident(names.add("x"), _),
-    //     ty: None,
-    //     value: Some(value),
-    //     span: _,
-    //     is_const: false,
-    // }) = a.next();
-    // let v = 
-
-    // assert_eq!(*ast_exprs.clone(), vec![
-    //     Expr::Var {
-    //         visibility: Visibility::Private,
-    //         name: Ident(names.add("x"), Span::zero(id)),
-    //         ty: None,
-    //         value: Some(Box::from(Expr::Int(8, Span::zero(id)))),
-    //         span: Span::zero(id),
-    //         is_const: false,
-    //     },
-    //     Expr::If {
-    //         clause: Box::from(Expr::Call {
-    //             target: Box::from(Expr::Ident(Ident(
-    //                 names.builtin_binop_name(Symbol::More),
-    //                 Span::zero(id)
-    //             ))),
-    //             args: vec![
-    //                 (None, Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
-    //                 (None, Expr::Int(5, Span::zero(id))),
-    //             ],
-    //             op: Some((Symbol::More, Span::zero(id))),
-    //             span: Span::zero(id)
-    //         }),
-    //         truthy: Box::from(Expr::Block(vec![
-    //             Expr::Assign {
-    //                 target: Box::from(Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
-    //                 value: Box::from(Expr::Call {
-    //                     target: Box::from(Expr::Ident(Ident(names.add("hi_guys"), Span::zero(id)))),
-    //                     args: vec![],
-    //                     op: None,
-    //                     span: Span::zero(id)
-    //                 }),
-    //                 op: (Symbol::AddAssign, Span::zero(id)),
-    //                 span: Span::zero(id)
-    //             }
-    //         ], Span::zero(id))),
-    //         falsy: None,
-    //         span: Span::zero(id)
-    //     }
-    // ]);
+    ast_exprs.debug_ast_assert_eq(
+        &vec![
+            exprs.add(Expr::Var {
+                visibility: Visibility::Private,
+                name: Ident(names.add("x"), Span::zero(id)),
+                ty: None,
+                value: Some(exprs.add(Expr::Int(8, Span::zero(id)))),
+                span: Span::zero(id),
+                is_const: false,
+            }),
+            exprs.add(Expr::If {
+                clause: exprs.add(Expr::Call {
+                    target: exprs.add(Expr::Ident(Ident(
+                        names.builtin_binop_name(Symbol::More),
+                        Span::zero(id)
+                    ))),
+                    args: vec![
+                        (None, exprs.add(Expr::Ident(Ident(names.add("x"), Span::zero(id))))),
+                        (None, exprs.add(Expr::Int(5, Span::zero(id)))),
+                    ],
+                    op: Some((Symbol::More, Span::zero(id))),
+                    span: Span::zero(id)
+                }),
+                truthy: exprs.add(Expr::Block(vec![
+                    exprs.add(Expr::Assign {
+                        target: exprs.add(Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
+                        value: exprs.add(Expr::Call {
+                            target: exprs.add(Expr::Ident(Ident(names.add("hi_guys"), Span::zero(id)))),
+                            args: vec![],
+                            op: None,
+                            span: Span::zero(id)
+                        }),
+                        op: (Symbol::AddAssign, Span::zero(id)),
+                        span: Span::zero(id)
+                    })
+                ], Span::zero(id))),
+                falsy: None,
+                span: Span::zero(id)
+            })
+        ],
+        exprs.clone()
+    );
 }

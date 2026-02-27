@@ -1,7 +1,7 @@
 use crate::{
     ast::expr::{Expr, Ident, LogicChainType, ParseArgs},
     pools::{codebase::Span, exprs::{ExprId, Exprs}, messages::Message, names::NameId},
-    tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}, utils::tests::assert_ast
+    tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
@@ -327,7 +327,7 @@ fn binop() {
     use crate::pools::codebase::Codebase;
     use crate::pools::messages::Messages;
     use crate::pools::names::Names;
-    use std::assert_matches;
+    use crate::utils::tests::DebugAstEq;
 
     let mut codebase = Codebase::new();
     let id = codebase.add_memory("test_binop", "1 + 2 * 3 ** 4 - 5 + 6");
@@ -346,53 +346,37 @@ fn binop() {
 
     let ast = codebase.fetch(id).ast().unwrap().exprs();
     assert_eq!(ast.len(), 1);
-    
-    assert_ast!(exprs,
-        ast[0] => Expr::Yield(expr, ..),
-            *expr => Expr::Call { target, args, .. },
-                *target => Expr::Ident(Ident(name, _), ..),
-                @run assert_eq!(*name, names.builtin_binop_name(Symbol::Plus)),
-                args[0].1 => Expr::Call { target, args, op, span },
-    );
 
-    exprs.exec(ast[0], |e| {
-        let Expr::Yield(expr, ..) = e else { panic!(); };
-        exprs.exec(*expr, |e| {
-            let Expr::Call { target, args, op, .. } = e else { panic!(); };
-            assert_matches!(args[0].0, None);
-            args[0].1;
-        });
+    let make_shit_up = |op: Symbol, lhs: ExprId, rhs: ExprId| exprs.add(Expr::Call {
+        target: exprs.add(Expr::Ident(Ident(
+            names.builtin_binop_name(op),
+            Span::zero(id)
+        ))),
+        args: vec![(None, lhs), (None, rhs)],
+        op: Some((op, Span::zero(id))),
+        span: Span::zero(id)
     });
 
-    // let make_shit_up = |op: Symbol, lhs: Expr, rhs: Expr| Expr::Call {
-    //     target: exprs.add(Expr::Ident(Ident(
-    //         names.builtin_binop_name(op),
-    //         Span::zero(id)
-    //     ))),
-    //     args: vec![(None, lhs), (None, rhs)],
-    //     op: Some((op, Span::zero(id))),
-    //     span: Span::zero(id)
-    // };
-
-    // assert_eq!(ast[0],
-    //     Expr::Yield(
-    //         make_shit_up(Symbol::Plus, 
-    //             make_shit_up(Symbol::Minus,
-    //                 make_shit_up(Symbol::Plus, 
-    //                     Expr::Int(1, Span::zero(id)),
-    //                     make_shit_up(Symbol::Mul,
-    //                         Expr::Int(2, Span::zero(id)),
-    //                         make_shit_up(Symbol::Power,
-    //                             Expr::Int(3, Span::zero(id)),
-    //                             Expr::Int(4, Span::zero(id)),
-    //                         ),
-    //                     ),
-    //                 ),
-    //                 Expr::Int(5, Span::zero(id)),
-    //             ),
-    //             Expr::Int(6, Span::zero(id)),
-    //         ),
-    //         Span::zero(id)
-    //     )
-    // );
+    ast.debug_ast_assert_eq(
+        &[exprs.add(Expr::Yield(
+            make_shit_up(Symbol::Plus, 
+                make_shit_up(Symbol::Minus,
+                    make_shit_up(Symbol::Plus, 
+                        exprs.add(Expr::Int(1, Span::zero(id))),
+                        make_shit_up(Symbol::Mul,
+                            exprs.add(Expr::Int(2, Span::zero(id))),
+                            make_shit_up(Symbol::Power,
+                                exprs.add(Expr::Int(3, Span::zero(id))),
+                                exprs.add(Expr::Int(4, Span::zero(id))),
+                            ),
+                        ),
+                    ),
+                    exprs.add(Expr::Int(5, Span::zero(id))),
+                ),
+                exprs.add(Expr::Int(6, Span::zero(id))),
+            ),
+            Span::zero(id)
+        ))],
+        exprs.clone()
+    );
 }
