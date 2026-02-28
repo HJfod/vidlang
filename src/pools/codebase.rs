@@ -1,10 +1,7 @@
 use std::{collections::HashMap, ffi::OsStr, fs::read_to_string, io::Error, path::{Path, PathBuf}, range::Range, str::Chars};
 
 use crate::{
-    ast::expr::{Ast, ParseArgs},
-    utils::lookahead_iter::Looakhead,
-    pools::{exprs::Exprs, messages::Messages, names::Names},
-    tokens::{tokenizer::Tokenizer, tokenstream::Tokens}
+    ast::expr::{Ast, ParseArgs, Parser}, pools::{exprs::Exprs, messages::Messages, names::Names}, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}, utils::lookahead_iter::Looakhead
 };
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -213,7 +210,7 @@ impl Codebase {
             return self.get(id).parsed_ast.as_ref();
         }
         let mut tokens = self.tokenize(id, names, messages.clone())?;
-        self.get_mut(id).parsed_ast = Some(Ast::parse(&mut tokens, exprs.clone(), args));
+        self.get_mut(id).parsed_ast = Some(Ast::parse(&mut Parser::new(&mut tokens, exprs, args)));
         self.get(id).parsed_ast.as_ref()
     }
     pub fn parse_all(&mut self, names: Names, messages: Messages, exprs: Exprs, args: ParseArgs) {

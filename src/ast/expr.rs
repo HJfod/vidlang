@@ -137,8 +137,8 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn parse(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs) -> ExprId {
-        Self::parse_binop(tokens, exprs.clone(), args)
+    pub fn parse(parser: &mut Parser<'_>) -> ExprId {
+        Self::parse_binop(parser)
     }
     pub fn requires_semicolon(&self, exprs: Exprs) -> bool {
         let sub_requires = |id: ExprId| {
@@ -201,7 +201,7 @@ impl Expr {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ParseArgs {
     // Useful for tests
     pub allow_non_definitions_at_root: bool,
@@ -216,11 +216,26 @@ impl Default for ParseArgs {
     }
 }
 
+pub struct Parser<'t> {
+    pub tokens: &'t mut Tokens,
+    pub exprs: Exprs,
+    pub args: ParseArgs,
+}
+
+impl<'t> Parser<'t> {
+    pub fn new(tokens: &'t mut Tokens, exprs: Exprs, args: ParseArgs) -> Self {
+        Self { tokens, exprs, args }
+    }
+    pub fn fork<'s>(&self, other_tokens: &'s mut Tokens) -> Parser<'s> {
+        Parser::new(other_tokens, self.exprs.clone(), self.args)
+    }
+}
+
 #[derive(Debug)]
 pub struct Ast(Vec<ExprId>);
 impl Ast {
-    pub fn parse(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs) -> Ast {
-        Ast(Expr::parse_semicolon_expr_list(tokens, !args.allow_non_definitions_at_root, exprs, args))
+    pub fn parse(parser: &mut Parser<'_>) -> Ast {
+        Ast(Expr::parse_semicolon_expr_list(parser, !parser.args.allow_non_definitions_at_root))
     }
     pub fn exprs(&self) -> &[ExprId] {
         &self.0

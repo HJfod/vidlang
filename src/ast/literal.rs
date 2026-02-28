@@ -1,111 +1,107 @@
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, IdentPath, ParseArgs, StringComp},
-    pools::{exprs::{ExprId, Exprs}, messages::Message},
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, IdentPath, Parser, StringComp},
+    pools::{exprs::{ExprId}, messages::Message},
     tokens::{token::{BracketType, StrLitComp, Symbol, Token},
-    tokenstream::Tokens
 }};
 
 impl Expr {
-    pub(super) fn parse_ident_path(tokens: &mut Tokens, _exprs: Exprs, _args: ParseArgs) -> IdentPath {
+    pub(super) fn parse_ident_path(parser: &mut Parser<'_>) -> IdentPath {
         // All ident paths must have at least one ident to them
-        let start = tokens.start();
-        let mut res = vec![tokens.expect_ident()];
-        while tokens.peek_and_expect_symbol(Symbol::Scope) {
-            res.push(tokens.expect_ident());
+        let start = parser.tokens.start();
+        let mut res = vec![parser.tokens.expect_ident()];
+        while parser.tokens.peek_and_expect_symbol(Symbol::Scope) {
+            res.push(parser.tokens.expect_ident());
         }
-        IdentPath(res, tokens.span_from(start))
+        IdentPath(res, parser.tokens.span_from(start))
     }
 
-    pub(super) fn parse_value(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs)
-     -> ExprId
-    {
+    pub(super) fn parse_value(parser: &mut Parser<'_>) -> ExprId {
         // Arrow functions
         if (
-            tokens.peek_bracketed(BracketType::Parentheses) || 
+            parser.tokens.peek_bracketed(BracketType::Parentheses) || 
             // Allow `a => a` syntax
-            tokens.peek_ident()
+            parser.tokens.peek_ident()
          ) &&
-            tokens.peek_n(1).is_some_and(
+            parser.tokens.peek_n(1).is_some_and(
                 |t| matches!(t, Token::Symbol(Symbol::FatArrow | Symbol::Arrow, _))
             )
         {
-            let start = tokens.start();
+            let start = parser.tokens.start();
 
-            let params = if tokens.peek_ident() {
+            let params = if parser.tokens.peek_ident() {
                 vec![FunctionParam {
                     kind: FunctionParamKind::Normal,
-                    name: tokens.expect_ident(),
+                    name: parser.tokens.expect_ident(),
                     ty: None,
                     default_value: None
                 }]
             }
             else {
-                match tokens.expect_bracketed(BracketType::Parentheses) {
-                    Token::Bracketed(_, mut params_tokens, _) => Expr::parse_comma_list(
-                        Expr::parse_function_param, &mut params_tokens, exprs.clone(), args
-                    ),
+                match parser.tokens.expect_bracketed(BracketType::Parentheses) {
+                    Token::Bracketed(_, mut params_tokens, _) => 
+                        Expr::parse_comma_list(Expr::parse_function_param, &mut parser.fork(&mut params_tokens)),
                     _ => vec![],
                 }
             };
-            let Some(Token::Symbol(sym, sym_span)) = tokens.next() else {
-                unreachable!("a symbol was previously peeked but tokens.next() did not return one");
+            let Some(Token::Symbol(sym, sym_span)) = parser.tokens.next() else {
+                unreachable!("a symbol was previously peeked but parser.tokens.next() did not return one");
             };
             if sym == Symbol::Arrow {
-                tokens.messages().add(Message::new_error(
+                parser.tokens.messages().add(Message::new_error(
                     "arrow functions are defined with `=>`, not `->`",
                     sym_span
                 ));
             }
-            let body = Expr::parse(tokens, exprs.clone(), args);
-            return exprs.add(Expr::ArrowFunction {
-                params, body, span: tokens.span_from(start) }
+            let body = Expr::parse(parser);
+            return parser.exprs.add(Expr::ArrowFunction {
+                params, body, span: parser.tokens.span_from(start) }
             );
         }
 
         // Parenthesized expression `(something)`
-        if tokens.peek_bracketed(BracketType::Parentheses) {
-            let Token::Bracketed(_, mut sub_tokens, _) = tokens.expect_bracketed(BracketType::Parentheses) else {
-                unreachable!("tokens.expect_bracketed didnt return Bracketed despite being peeked");
+        if parser.tokens.peek_bracketed(BracketType::Parentheses) {
+            let Token::Bracketed(_, mut sub_tokens, _) = parser.tokens.expect_bracketed(BracketType::Parentheses) else {
+                unreachable!("parser.tokens.expect_bracketed didnt return Bracketed despite being peeked");
             };
-            let content = Expr::parse(&mut sub_tokens, exprs, args);
+            let content = Expr::parse(&mut parser.fork(&mut sub_tokens));
             sub_tokens.expect_empty();
             return content;
         }
 
         // Basic literals
-        if tokens.peek_symbol(Symbol::False) || tokens.peek_symbol(Symbol::True) {
-            let Some(Token::Symbol(sym, span)) = tokens.next() else {
-                unreachable!("tokens.peek_symbol returned true but next() did not return a symbol");
+        if parser.tokens.peek_symbol(Symbol::False) || parser.tokens.peek_symbol(Symbol::True) {
+            let Some(Token::Symbol(sym, span)) = parser.tokens.next() else {
+                unreachable!("parser.tokens.peek_symbol returned true but next() did not return a symbol");
             };
-            return exprs.add(Expr::Bool(sym == Symbol::True, span));
+            return parser.exprs.add(Expr::Bool(sym == Symbol::True, span));
         }
-        if tokens.peek_int() {
-            let Token::Int(num, span) = tokens.expect_int() else {
-                unreachable!("tokens.peek_int() returned true but expect_int() did not return an integer");
+        if parser.tokens.peek_int() {
+            let Token::Int(num, span) = parser.tokens.expect_int() else {
+                unreachable!("parser.tokens.peek_int() returned true but expect_int() did not return an integer");
             };
-            return exprs.add(Expr::Int(num, span));
+            return parser.exprs.add(Expr::Int(num, span));
         }
-        if tokens.peek_float() {
-            let Token::Float(num, span) = tokens.expect_float() else {
-                unreachable!("tokens.peek_float() returned true but expect_float() did not return a float");
+        if parser.tokens.peek_float() {
+            let Token::Float(num, span) = parser.tokens.expect_float() else {
+                unreachable!("parser.tokens.peek_float() returned true but expect_float() did not return a float");
             };
-            return exprs.add(Expr::Float(num, span));
+            return parser.exprs.add(Expr::Float(num, span));
         }
-        if tokens.peek_duration() {
-            let Token::Duration(num, span) = tokens.expect_duration() else {
-                unreachable!("tokens.peek_duration() returned true but expect_duration() did not return a float");
+        if parser.tokens.peek_duration() {
+            let Token::Duration(num, span) = parser.tokens.expect_duration() else {
+                unreachable!("parser.tokens.peek_duration() returned true but expect_duration() did not return a float");
             };
-            return exprs.add(Expr::Duration(num, span));
+            return parser.exprs.add(Expr::Duration(num, span));
         }
-        if tokens.peek_str() {
-            let Token::String(value, span) = tokens.expect_str() else {
-                unreachable!("tokens.peek_str() returned true but expect_str() did not return a string");
+        if parser.tokens.peek_str() {
+            let Token::String(value, span) = parser.tokens.expect_str() else {
+                unreachable!("parser.tokens.peek_str() returned true but expect_str() did not return a string");
             };
-            return exprs.add(Expr::String(
+            return parser.exprs.add(Expr::String(
                 value.into_iter().map(|c| match c {
                     StrLitComp::String(s) => StringComp::String(s),
                     StrLitComp::Component(mut c) => {
-                        let expr = Expr::parse(&mut c, exprs.clone(), args);
+                        let expr = Expr::parse(&mut parser.fork(&mut c));
                         c.expect_empty();
                         StringComp::Expr(expr)
                     }
@@ -113,12 +109,12 @@ impl Expr {
                 span
             ));
         }
-        if tokens.peek_ident() {
-            let path = Expr::parse_ident_path(tokens, exprs.clone(), args);
-            return exprs.add(Expr::Ident(path));
+        if parser.tokens.peek_ident() {
+            let path = Expr::parse_ident_path(parser);
+            return parser.exprs.add(Expr::Ident(path));
         }
 
-        let span = tokens.expected("expression");
-        exprs.add(Expr::Ident(tokens.names().missing_path(span)))
+        let span = parser.tokens.expected("expression");
+        parser.exprs.add(Expr::Ident(parser.tokens.names().missing_path(span)))
     }
 }

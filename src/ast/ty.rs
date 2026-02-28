@@ -1,26 +1,26 @@
-use crate::{ast::expr::{Expr, ParseArgs}, pools::exprs::{ExprId, Exprs}, tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}};
+use crate::{ast::expr::{Expr, Parser}, pools::exprs::ExprId, tokens::token::{BracketType, Symbol, Token}};
 
 impl Expr {
-    pub(super) fn parse_type(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs) -> ExprId {
-        let start = tokens.start();
+    pub(super) fn parse_type(parser: &mut Parser<'_>) -> ExprId {
+        let start = parser.tokens.start();
 
         // Array types `[Thing]`
-        if tokens.peek_bracketed(BracketType::Brackets) {
-            let inner = match tokens.expect_bracketed(BracketType::Brackets) {
-                Token::Bracketed(_, mut content, _) => Expr::parse_type(&mut content, exprs.clone(), args),
-                _ => exprs.add(Expr::Ident(tokens.names().missing_path(tokens.span_from(start)))),
+        if parser.tokens.peek_bracketed(BracketType::Brackets) {
+            let inner = match parser.tokens.expect_bracketed(BracketType::Brackets) {
+                Token::Bracketed(_, mut content, _) => Expr::parse_type(&mut parser.fork(&mut content)),
+                _ => parser.exprs.add(Expr::Ident(parser.tokens.names().missing_path(parser.tokens.span_from(start)))),
             };
-            return exprs.add(Expr::TyArray { inner, span: tokens.span_from(start) });
+            return parser.exprs.add(Expr::TyArray { inner, span: parser.tokens.span_from(start) });
         }
 
         // Anytype (special thing for specific overloads)
-        if tokens.peek_and_expect_symbol(Symbol::Anytype) {
-            return exprs.add(Expr::TyAny(tokens.span_from(start)));
+        if parser.tokens.peek_and_expect_symbol(Symbol::Anytype) {
+            return parser.exprs.add(Expr::TyAny(parser.tokens.span_from(start)));
         }
 
         // Normal named type
-        let name = Expr::parse_ident_path(tokens, exprs.clone(), args);
-        exprs.add(Expr::TyNamed { name, span: tokens.span_from(start) })
+        let name = Expr::parse_ident_path(parser);
+        parser.exprs.add(Expr::TyNamed { name, span: parser.tokens.span_from(start) })
     }
 }
 
@@ -29,6 +29,8 @@ fn type_parse() {
     use crate::pools::codebase::Codebase;
     use crate::pools::names::Names;
     use crate::pools::messages::Messages;
+    use crate::pools::exprs::Exprs;
+    use crate::ast::expr::ParseArgs;
 
     let (mut codebase, _) = Codebase::new_with_test_package("test_type_parse", r#"
         let x: A::B::C;
