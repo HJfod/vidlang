@@ -49,6 +49,7 @@ pub enum Symbol {
     // Keywords
     Let, Const, Type, Function, Clip, Trait, Impl, Struct, Module, Unit,
     Private, Public, Ref,
+    Anytype,
     Match, If, Then, Else, While, For, In, Loop, Await, Return, Yield,
     And, Or,
     True, False,

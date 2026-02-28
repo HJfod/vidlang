@@ -142,7 +142,6 @@ impl DebugAstEq for Expr {
             (Expr::Float(a, _), Expr::Float(b, _)) => a.debug_ast_assert_eq(b, exprs),
             (Expr::String(a, _), Expr::String(b, _)) => a.debug_ast_assert_eq(b, exprs),
             (Expr::Ident(a), Expr::Ident(b)) => a.debug_ast_assert_eq(b, exprs),
-            (Expr::Tuple(a, _), Expr::Tuple(b, _)) => a.debug_ast_assert_eq(b, exprs),
 
             (
                 Expr::Var {

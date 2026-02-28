@@ -44,7 +44,7 @@
 				},
 				{
 					"name": "keyword.other.vid",
-					"match": "\\b(ref)\\b"
+					"match": "\\b(ref|anytype)\\b"
 				},
 				{
 					"name": "entity.name.tag.vid",
@@ -60,7 +60,7 @@
 				},
 				{
 					"name": "constant.numeric.vid",
-					"match": "\\b([0-9]+(\\.[0-9]+)?)\\b"
+					"match": "\\b([0-9]+(\\.[0-9]+)?(\\p{XID_Start}\\p{XID_Continue}*)?)\\b"
 				},
 				{
 					"name": "constant.numeric.vid",
@@ -75,7 +75,7 @@
 					"match": "\\b(\\p{Uppercase}\\p{Uppercase}+)\\b"
 				},
 				{
-					"match": "\\b(bool|int|float|string|duration|any)\\b",
+					"match": "\\b(bool|int|float|string|duration)\\b",
 					"name": "entity.name.type.language.vid"
 				},
 				{

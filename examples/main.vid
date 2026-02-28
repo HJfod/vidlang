@@ -17,6 +17,8 @@ clip epic_rectangle(width: float, height: float) {
     let rect = rectangle(width, height);
     
     await rect;
+
+    await 5s;
 }
 
 clip glow(target: Clip) {

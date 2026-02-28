@@ -54,7 +54,6 @@ pub enum Expr {
     Duration(Duration, Span),
     String(Vec<StringComp>, Span),
     Ident(IdentPath),
-    Tuple(Vec<ExprId>, Span),
 
     // `let a: B = 5`
     Var {
@@ -78,6 +77,11 @@ pub enum Expr {
     ArrowFunction {
         params: Vec<FunctionParam>,
         body: ExprId,
+        span: Span,
+    },
+    Module {
+        name: IdentPath,
+        items: Vec<ExprId>,
         span: Span,
     },
 
@@ -125,6 +129,11 @@ pub enum Expr {
         name: IdentPath,
         span: Span,
     },
+    TyAny(Span),
+    TyArray {
+        inner: ExprId,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -142,11 +151,11 @@ impl Expr {
             Self::Duration(..) => true,
             Self::String(..) => true,
             Self::Ident(..) => true,
-            Self::Tuple(..) => true,
 
             Self::Var { .. } => true,
             Self::Function { body, .. } => sub_requires(*body),
             Self::ArrowFunction { body, .. } => sub_requires(*body),
+            Self::Module { .. } => false,
 
             Self::Call { .. } => true,
             Self::FieldAccess { .. } => true,
@@ -160,6 +169,8 @@ impl Expr {
             Self::Await(value, _) => sub_requires(*value),
 
             Self::TyNamed { .. } => true,
+            Self::TyAny(..) => true,
+            Self::TyArray { .. } => true,
         }
     }
     pub fn span(&self) -> Span {
@@ -170,10 +181,10 @@ impl Expr {
             Self::Duration(_, span) => *span,
             Self::String(_, span) => *span,
             Self::Ident(ident) => ident.1,
-            Self::Tuple(_, span) => *span,
             Self::Var { span, .. } => *span,
             Self::Function { span, .. } => *span,
             Self::ArrowFunction { span, .. } => *span,
+            Self::Module { span, .. } => *span,
             Self::Call { span, .. } => *span,
             Self::FieldAccess { span, .. } => *span,
             Self::Assign { span, .. } => *span,
@@ -184,6 +195,8 @@ impl Expr {
             Self::Block(_, span) => *span,
             Self::Await(_, span) => *span,
             Self::TyNamed { span, .. } => *span,
+            Self::TyAny(span) => *span,
+            Self::TyArray { span, .. } => *span,
         }
     }
 }
@@ -253,7 +266,7 @@ fn parse() {
     let (mut codebase, id) = Codebase::new_with_test_package("test_parse", r#"
         let x = 8;
         if x > 5 {
-            x += lib::hi_guys();
+            ((x)) += lib::hi_guys();
         }
     "#);
     let names = Names::new();

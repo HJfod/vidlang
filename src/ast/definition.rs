@@ -49,6 +49,7 @@ impl Expr {
         }
 
         let is_const = tokens.peek_and_expect_symbol(Symbol::Const);
+        let is_const_span = tokens.last_span();
 
         // Check if there are visibility modifiers (aka wrong order)
         while let Some((_, span)) = tokens.peek_and_expect_symbol_of(is_vis_modifier) {
@@ -56,6 +57,24 @@ impl Expr {
                 "visibility modifiers must go before const specifier",
                 span
             ));
+        }
+
+        // Modules
+        if tokens.peek_and_expect_symbol(Symbol::Module) {
+            if is_const {
+                tokens.messages().add(Message::new_error(
+                    "modules may not be marked const",
+                    is_const_span,
+                ));
+            }
+            let name = Expr::parse_ident_path(tokens, exprs.clone(), args);
+            let items = if let Token::Bracketed(_, mut content, _) = tokens.expect_bracketed(BracketType::Braces) {
+                Expr::parse_semicolon_expr_list(&mut content, true, exprs.clone(), args)
+            }
+            else {
+                Vec::new()
+            };
+            return Some(exprs.add(Expr::Module { name, items, span: tokens.span_from(start) }))
         }
 
         // Function or clip definition

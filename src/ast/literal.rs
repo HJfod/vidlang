@@ -62,14 +62,14 @@ impl Expr {
             );
         }
 
-        // Tuples
+        // Parenthesized expression `(something)`
         if tokens.peek_bracketed(BracketType::Parentheses) {
-            let start = tokens.start();
             let Token::Bracketed(_, mut sub_tokens, _) = tokens.expect_bracketed(BracketType::Parentheses) else {
                 unreachable!("tokens.expect_bracketed didnt return Bracketed despite being peeked");
             };
-            let fields = Expr::parse_comma_list(Expr::parse, &mut sub_tokens, exprs.clone(), args);
-            return exprs.add(Expr::Tuple(fields, tokens.span_from(start)));
+            let content = Expr::parse(&mut sub_tokens, exprs, args);
+            sub_tokens.expect_empty();
+            return content;
         }
 
         // Basic literals
