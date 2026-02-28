@@ -159,7 +159,7 @@ fn parse_arrow_function() {
     let mut codebase = Codebase::from_memory("parse_arrow_function", r#"
         let x = (a, b) => a + b;
         let y = a => a;
-    "#);
+    "#).unwrap();
 
     let names = Names::new();
     let exprs = Exprs::new();

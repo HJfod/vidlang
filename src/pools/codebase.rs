@@ -148,6 +148,7 @@ pub struct Codebase {
     modules: Vec<Module>,
 }
 
+#[derive(Debug)]
 pub enum CodebaseCreateError {
     CantFindRoot,
     UnableToReadDir(PathBuf, String),
@@ -175,10 +176,10 @@ impl Codebase {
         ret.add_dir(Some(root_id), path)?;
         Ok(ret)
     }
-    pub fn from_memory(name: &str, data: &str) -> Self {
+    pub fn from_memory(name: &str, data: &str) -> Result<Self, CodebaseCreateError> {
         let mut ret = Self { modules: Default::default() };
-        ret.add_memory(None, name, data);
-        ret
+        ret.add_memory(None, name, data)?;
+        Ok(ret)
     }
 
     fn add_mod(
@@ -341,7 +342,7 @@ impl PartialEq for Span {
 
 #[test]
 fn src_iter() {
-    let codebase = Codebase::from_memory("test_src_iter", "abcdefg");
+    let codebase = Codebase::from_memory("test_src_iter", "abcdefg").unwrap();
     let mut iter = codebase.fetch(codebase.root()).create_iter().unwrap();
     for ch in 'a'..='g' {
         assert_eq!(iter.peek(), Some(ch));

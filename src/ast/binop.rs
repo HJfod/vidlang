@@ -300,7 +300,7 @@ fn ambiguous_exprs() {
     use crate::pools::names::Names;
 
     let test_expr = |data: &str| {
-        let mut codebase = Codebase::from_memory("test_ambiguous_exprs", data);
+        let mut codebase = Codebase::from_memory("test_ambiguous_exprs", data).unwrap();
 
         let names = Names::new();
         let messages = Messages::new();
@@ -328,7 +328,7 @@ fn binop() {
     use crate::pools::names::Names;
     use crate::utils::tests::DebugAstEq;
 
-    let mut codebase = Codebase::from_memory("test_binop", "1 + 2 * 3 ** 4 - 5 + 6");
+    let mut codebase = Codebase::from_memory("test_binop", "1 + 2 * 3 ** 4 - 5 + 6").unwrap();
 
     let names = Names::new();
     let messages = Messages::new();

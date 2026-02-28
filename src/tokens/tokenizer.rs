@@ -288,7 +288,7 @@ fn strings() {
     let codebase = Codebase::from_memory("strings", r#"
         "String with\nmore lines and\n\tescape sequences!"
         "String with {  interpolation  } and {stuff}{}"
-    "#);
+    "#).unwrap();
     let mut tokens = codebase.fetch(codebase.root()).tokenize(names.clone(), messages.clone()).unwrap();
 
     let Some(Token::String(escaped_vec, _)) = tokens.next() else { panic!() };
@@ -320,7 +320,7 @@ fn tokenizer() {
     let messages = Messages::new();
     let codebase = Codebase::from_memory("test_tokenizer", r#"
         let x += 5;
-    "#);
+    "#).unwrap();
     let tokens = codebase.fetch(codebase.root()).tokenize(names, messages.clone()).unwrap().collect::<Vec<_>>();
     assert!(messages.count_total() == 0, "{messages:?}");
     assert_eq!(tokens.len(), 5);

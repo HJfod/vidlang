@@ -218,7 +218,7 @@ fn invalid_parses() {
     use crate::pools::names::Names;
 
     let test_expr = |data: &str| {
-        let mut codebase = Codebase::from_memory("invalid_parses", data);
+        let mut codebase = Codebase::from_memory("invalid_parses", data).unwrap();
 
         let names = Names::new();
         let messages = Messages::new();
@@ -254,7 +254,7 @@ fn parse() {
         if x > 5 {
             x += lib::hi_guys();
         }
-    "#);
+    "#).unwrap();
     let names = Names::new();
     let exprs = Exprs::new();
     let messages = Messages::new();

@@ -206,7 +206,7 @@ fn tokenizing() {
         let x += -5 + 2.3;
         @thing("dawg", 5.2)
         "Hello, world!\n\t";
-    "#);
+    "#).unwrap();
 
     let mut tokens = codebase.fetch(codebase.root()).tokenize(names, messages.clone()).unwrap();
     tokens.expect_symbol(Symbol::Let);

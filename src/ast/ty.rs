@@ -16,7 +16,7 @@ fn type_parse() {
 
     let mut codebase = Codebase::from_memory("test_type_parse", r#"
         let x: A::B::C;
-    "#);
+    "#).unwrap();
     let names = Names::new();
     let exprs = Exprs::new();
     let messages = Messages::new();
