@@ -30,12 +30,12 @@ impl Expr {
     pub(super) fn try_parse_definition(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs) -> Option<ExprId> {
         let start = tokens.start();
 
+        let is_vis_modifier = |sym| matches!(sym, Symbol::Private | Symbol::Public);
+
         // Get visibility; by default, everything is private
         let mut visibility = Visibility::Private;
         let mut found_explicit_vis = None;
-        while let Some((sym, span)) = tokens.peek_and_expect_symbol_of(
-            |sym| matches!(sym, Symbol::Private | Symbol::Public)
-        ) {
+        while let Some((sym, span)) = tokens.peek_and_expect_symbol_of(is_vis_modifier) {
             if found_explicit_vis.is_some() {
                 tokens.messages().add(Message::new_error(
                     "only one visibility modifier may be used per definition",
@@ -48,19 +48,14 @@ impl Expr {
             }
         }
 
-        // Variable definition
-        if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(|sym| matches!(sym, Symbol::Let | Symbol::Const)) {
-            let name = tokens.expect_ident();
-            let ty = tokens.peek_and_expect_symbol(Symbol::Colon)
-                .then(|| Expr::parse_type(tokens, exprs.clone(), args));
-            let value = tokens.peek_and_expect_symbol(Symbol::Assign)
-                .then(|| Expr::parse(tokens, exprs.clone(), args));
-            return Some(exprs.add(Expr::Var {
-                visibility,
-                name, ty, value,
-                span: tokens.span_from(start),
-                is_const: sym == Symbol::Const,
-            }));
+        let is_const = tokens.peek_and_expect_symbol(Symbol::Const);
+
+        // Check if there are visibility modifiers (aka wrong order)
+        while let Some((_, span)) = tokens.peek_and_expect_symbol_of(is_vis_modifier) {
+            tokens.messages().add(Message::new_error(
+                "visibility modifiers must go before const specifier",
+                span
+            ));
         }
 
         // Function or clip definition
@@ -107,7 +102,24 @@ impl Expr {
                 visibility,
                 name, params, return_ty, body,
                 is_clip: sym == Symbol::Clip,
+                is_const,
                 span: tokens.span_from(start)
+            }));
+        }
+
+        // Variable definition (constants may be defined with shorthand 
+        // `const a = x;`)
+        if tokens.peek_and_expect_symbol(Symbol::Let) || is_const {
+            let name = tokens.expect_ident();
+            let ty = tokens.peek_and_expect_symbol(Symbol::Colon)
+                .then(|| Expr::parse_type(tokens, exprs.clone(), args));
+            let value = tokens.peek_and_expect_symbol(Symbol::Assign)
+                .then(|| Expr::parse(tokens, exprs.clone(), args));
+            return Some(exprs.add(Expr::Var {
+                visibility,
+                name, ty, value,
+                span: tokens.span_from(start),
+                is_const,
             }));
         }
 
@@ -144,15 +156,14 @@ fn parse_arrow_function() {
     use crate::pools::names::Names;
     use crate::pools::messages::Messages;
 
-    let mut codebase = Codebase::new();
-    let names = Names::new();
-    let exprs = Exprs::new();
-    let messages = Messages::new();
-
-    let _id = codebase.add_memory("parse_arrow_function", r#"
+    let mut codebase = Codebase::from_memory("parse_arrow_function", r#"
         let x = (a, b) => a + b;
         let y = a => a;
     "#);
+
+    let names = Names::new();
+    let exprs = Exprs::new();
+    let messages = Messages::new();
     codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs {
         allow_non_definitions_at_root: true
     });

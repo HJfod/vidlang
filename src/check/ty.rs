@@ -1,9 +1,12 @@
-use crate::{ast::expr::Expr, pools::names::NameId};
+use std::collections::HashMap;
+
+use crate::{ast::expr::Expr, pools::{codebase::{Codebase, ModId}, exprs::ExprId, names::NameId}};
 
 pub enum Ty {
     Bool,
     Int,
     Float,
+    Duration,
     String,
     Tuple(Vec<Ty>),
     Function {
@@ -27,6 +30,26 @@ pub enum ConstValue {
     Bool(bool),
     Int(i64),
     Float(f64),
+    Duration(f64),
     String(String),
     Tuple(Vec<ConstValue>),
+}
+
+pub enum Item {
+    Constant(NameId, ExprId, ConstValue),
+    Module {
+        name: NameId,
+        definition: ModId,
+        items: HashMap<NameId, Item>,
+    },
+}
+
+pub struct Checker {
+    root_module: Item,
+}
+
+impl Checker {
+    pub fn new(codebase: &Codebase) -> Self {
+        todo!()
+    }
 }

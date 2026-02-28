@@ -300,8 +300,7 @@ fn ambiguous_exprs() {
     use crate::pools::names::Names;
 
     let test_expr = |data: &str| {
-        let mut codebase = Codebase::new();
-        codebase.add_memory("test_ambiguous_exprs", data);
+        let mut codebase = Codebase::from_memory("test_ambiguous_exprs", data);
 
         let names = Names::new();
         let messages = Messages::new();
@@ -329,8 +328,7 @@ fn binop() {
     use crate::pools::names::Names;
     use crate::utils::tests::DebugAstEq;
 
-    let mut codebase = Codebase::new();
-    let id = codebase.add_memory("test_binop", "1 + 2 * 3 ** 4 - 5 + 6");
+    let mut codebase = Codebase::from_memory("test_binop", "1 + 2 * 3 ** 4 - 5 + 6");
 
     let names = Names::new();
     let messages = Messages::new();
@@ -344,6 +342,7 @@ fn binop() {
         "messages was not empty:\n{}", messages.to_test_string(&codebase)
     );
 
+    let id = codebase.root();
     let ast = codebase.fetch(id).ast().unwrap().exprs();
     assert_eq!(ast.len(), 1);
 

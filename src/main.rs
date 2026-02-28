@@ -1,7 +1,7 @@
 #![feature(new_range_api)]
 
 use clap::Parser;
-use crate::{ast::expr::ParseArgs, pools::{codebase::Codebase, exprs::Exprs, messages::Messages, names::Names}};
+use crate::{ast::expr::ParseArgs, pools::{codebase::{Codebase, CodebaseCreateError}, exprs::Exprs, messages::Messages, names::Names}};
 
 mod ast;
 mod pools;
@@ -19,8 +19,14 @@ fn main() {
     let messages = Messages::new();
     let names = Names::new();
     let exprs = Exprs::new();
-    let mut codebase = Codebase::new();
-    codebase.add_dir(&dir, messages.clone());
+    let mut codebase = match Codebase::from_dir(&dir) {
+        Ok(c) => c,
+        Err(e) => match e {
+            CodebaseCreateError::CantFindRoot => panic!("unable to find {}/main.vid!", dir.display()),
+            CodebaseCreateError::UnableToReadFile(p, e) => panic!("unable to read file {}: {e}", p.display()),
+            CodebaseCreateError::UnableToReadDir(p, e) => panic!("unable to read directory {}: {e}", p.display()),
+        }
+    };
 
     codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs::default());
 

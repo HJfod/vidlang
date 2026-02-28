@@ -3,7 +3,7 @@ use std::{ffi::OsStr, fs::{self, read_to_string}, path::{Path, PathBuf}, range::
 use crate::{
     ast::expr::{Ast, ParseArgs},
     utils::lookahead_iter::Looakhead,
-    pools::{exprs::Exprs, messages::{Message, MessageLevel, Messages}, names::Names},
+    pools::{exprs::Exprs, messages::Messages, names::Names},
     tokens::{tokenizer::Tokenizer, tokenstream::Tokens}
 };
 
@@ -22,12 +22,13 @@ enum ModuleSrc {
 pub struct Module {
     id: ModId,
     src: ModuleSrc,
+    submodules: Vec<ModId>,
     ast: Option<Ast>,
 }
 
 impl Module {
-    fn new(id: ModId, src: ModuleSrc) -> Self {
-        Self { id, src, ast: None }
+    fn new(id: ModId, submodules: Vec<ModId>, src: ModuleSrc) -> Self {
+        Self { id, submodules, src, ast: None }
     }
     pub fn name(&self) -> String {
         match &self.src {
@@ -133,83 +134,94 @@ impl<'s> Iterator for SrcIterator<'s> {
 }
 
 pub struct Codebase {
+    // Note: first module in this vec is *always* considered the root module!
     modules: Vec<Module>,
 }
 
+pub enum CodebaseCreateError {
+    CantFindRoot,
+    UnableToReadDir(PathBuf, String),
+    UnableToReadFile(PathBuf, String),
+}
+
 impl Codebase {
-    pub fn new() -> Self {
-        Self {
-            modules: Default::default(),
-        }
+    pub fn from_file(path: &Path) -> Result<Self, CodebaseCreateError> {
+        let mut ret = Self { modules: Default::default() };
+        ret.add_file(path)?;
+        Ok(ret)
     }
-    pub fn add_file(&mut self, path: &Path, messages: Messages) -> ModId {
+    pub fn from_dir(path: &Path) -> Result<Self, CodebaseCreateError> {
+        let mut ret = Self { modules: Default::default() };
+        let root = path.join("main.vid");
+        if !root.exists() {
+            return Err(CodebaseCreateError::CantFindRoot)?;
+        }
+        ret.add_file(&root)?;
+        ret.add_dir(path)?;
+        Ok(ret)
+    }
+    pub fn from_memory(name: &str, data: &str) -> Self {
+        let mut ret = Self { modules: Default::default() };
+        ret.add_memory(name, data);
+        ret
+    }
+
+    fn add_file(&mut self, path: &Path) -> Result<ModId, CodebaseCreateError> {
         if let Some((id, _)) = self.modules.iter().enumerate().find(|m| m.1.path() == Some(path)) {
-            return ModId(id);
+            return Ok(ModId(id));
         }
         let id = ModId(self.modules.len());
         self.modules.push(Module::new(
             id,
-            ModuleSrc::File(
-                path.to_path_buf(),
-                match read_to_string(path) {
-                    Ok(data) => data,
-                    Err(e) => {
-                        messages.add(Message::new_error(
-                            format!("unable to read source module {}: {e}", path.display()),
-                            Span(id, (0..1).into())
-                        ));
-                        String::new()
-                    }
-                }
-            )
+            Vec::new(),
+            ModuleSrc::File(path.to_path_buf(), match read_to_string(path) {
+                Ok(d) => d,
+                Err(e) => Err(CodebaseCreateError::UnableToReadFile(path.to_path_buf(), e.to_string()))?
+            })
         ));
-        id
+        Ok(id)
     }
-    pub fn add_memory(&mut self, name: &str, data: &str) -> ModId {
+    fn add_memory(&mut self, name: &str, data: &str) -> ModId {
         // In-memory modules are always unique
         let id = ModId(self.modules.len());
         self.modules.push(Module::new(
             id,
+            Vec::new(),
             ModuleSrc::Memory { name: name.to_string(), data: data.to_string() }
         ));
         id
     }
-    pub fn add_dir(&mut self, dir: &Path, messages: Messages) -> ModId {
-        let dir_id = ModId(self.modules.len());
-        self.modules.push(Module::new(dir_id, ModuleSrc::Dir(dir.to_path_buf())));
+    fn add_dir(&mut self, dir: &Path) -> Result<ModId, CodebaseCreateError> {
+        if let Some((id, _)) = self.modules.iter().enumerate().find(|m| m.1.path() == Some(dir)) {
+            return Ok(ModId(id));
+        }
+        let mut submodules = Vec::new();
         match fs::read_dir(dir) {
             Ok(files) => for file in files {
                 match file {
                     Ok(f) => {
                         if f.file_type().is_ok_and(|t| t.is_dir()) {
-                            self.add_dir(&f.path(), messages.clone());
+                            submodules.push(self.add_dir(&f.path())?);
                         }
                         else if f.path().extension() == Some(OsStr::new("vid")) {
-                            self.add_file(&f.path(), messages.clone());
+                            submodules.push(self.add_file(&f.path())?);
                         }
                     }
-                    Err(e) => {
-                        messages.add(Message::new(
-                            MessageLevel::Error,
-                            format!("unable to read directory {}: {e}", dir.display()),
-                            None,
-                        ));
-                    }
+                    Err(e) => Err(CodebaseCreateError::UnableToReadFile(dir.to_path_buf(), e.to_string()))?
                 }
             }
-            Err(e) => {
-                messages.add(Message::new(
-                    MessageLevel::Error,
-                    format!("unable to read directory {}: {e}", dir.display()),
-                    None,
-                ));
-            }
+            Err(e) => Err(CodebaseCreateError::UnableToReadDir(dir.to_path_buf(), e.to_string()))?
         }
-        dir_id
+        let dir_id = ModId(self.modules.len());
+        self.modules.push(Module::new(dir_id, submodules, ModuleSrc::Dir(dir.to_path_buf())));
+        Ok(dir_id)
     }
 
     pub fn all_ids(&self) -> Vec<ModId> {
         self.modules.iter().enumerate().map(|m| ModId(m.0)).collect()
+    }
+    pub fn root(&self) -> ModId {
+        ModId(0)
     }
 
     pub fn fetch(&self, id: ModId) -> &Module {
@@ -261,9 +273,8 @@ impl PartialEq for Span {
 
 #[test]
 fn src_iter() {
-    let mut codebase = Codebase::new();
-    let id = codebase.add_memory("test_src_iter", "abcdefg");
-    let mut iter = codebase.fetch(id).create_iter().unwrap();
+    let codebase = Codebase::from_memory("test_src_iter", "abcdefg");
+    let mut iter = codebase.fetch(codebase.root()).create_iter().unwrap();
     for ch in 'a'..='g' {
         assert_eq!(iter.peek(), Some(ch));
         assert_eq!(iter.next(), Some(ch));

@@ -285,12 +285,11 @@ fn strings() {
 
     let names = Names::new();
     let messages = Messages::new();
-    let mut codebase = Codebase::new();
-    let id = codebase.add_memory("strings", r#"
+    let codebase = Codebase::from_memory("strings", r#"
         "String with\nmore lines and\n\tescape sequences!"
         "String with {  interpolation  } and {stuff}{}"
     "#);
-    let mut tokens = codebase.fetch(id).tokenize(names.clone(), messages.clone()).unwrap();
+    let mut tokens = codebase.fetch(codebase.root()).tokenize(names.clone(), messages.clone()).unwrap();
 
     let Some(Token::String(escaped_vec, _)) = tokens.next() else { panic!() };
     assert_eq!(escaped_vec.len(), 1, "string literal parts: {escaped_vec:?}");
@@ -319,11 +318,10 @@ fn tokenizer() {
     use crate::pools::codebase::Codebase;
     let names = Names::new();
     let messages = Messages::new();
-    let mut codebase = Codebase::new();
-    let id = codebase.add_memory("test_tokenizer", r#"
+    let codebase = Codebase::from_memory("test_tokenizer", r#"
         let x += 5;
     "#);
-    let tokens = codebase.fetch(id).tokenize(names, messages.clone()).unwrap().collect::<Vec<_>>();
+    let tokens = codebase.fetch(codebase.root()).tokenize(names, messages.clone()).unwrap().collect::<Vec<_>>();
     assert!(messages.count_total() == 0, "{messages:?}");
     assert_eq!(tokens.len(), 5);
     assert!(matches!(tokens[0], Token::Symbol(Symbol::Let, _)));

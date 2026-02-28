@@ -14,14 +14,13 @@ fn type_parse() {
     use crate::pools::names::Names;
     use crate::pools::messages::Messages;
 
-    let mut codebase = Codebase::new();
+    let mut codebase = Codebase::from_memory("test_type_parse", r#"
+        let x: A::B::C;
+    "#);
     let names = Names::new();
     let exprs = Exprs::new();
     let messages = Messages::new();
 
-    let _id = codebase.add_memory("test_type_parse", r#"
-        let x: A::B::C;
-    "#);
     codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs {
         allow_non_definitions_at_root: true
     });

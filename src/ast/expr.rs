@@ -71,6 +71,7 @@ pub enum Expr {
         return_ty: Option<ExprId>,
         body: ExprId,
         is_clip: bool,
+        is_const: bool,
         span: Span,
     },
     ArrowFunction {
@@ -217,8 +218,7 @@ fn invalid_parses() {
     use crate::pools::names::Names;
 
     let test_expr = |data: &str| {
-        let mut codebase = Codebase::new();
-        let id = codebase.add_memory("invalid_parses", data);
+        let mut codebase = Codebase::from_memory("invalid_parses", data);
 
         let names = Names::new();
         let messages = Messages::new();
@@ -231,7 +231,7 @@ fn invalid_parses() {
             messages.counts().0 > 0,
             "`{data}` didn't result in errors:\n{}\ninstead got ast: {:#?}",
             messages.to_test_string(&codebase),
-            codebase.fetch(id).ast()
+            codebase.fetch(codebase.root()).ast()
         );
     };
 
@@ -249,17 +249,16 @@ fn parse() {
     use crate::pools::messages::Messages;
     use crate::utils::tests::DebugAstEq;
 
-    let mut codebase = Codebase::new();
-    let names = Names::new();
-    let exprs = Exprs::new();
-    let messages = Messages::new();
-
-    let id = codebase.add_memory("test_parse", r#"
+    let mut codebase = Codebase::from_memory("test_parse", r#"
         let x = 8;
         if x > 5 {
             x += lib::hi_guys();
         }
     "#);
+    let names = Names::new();
+    let exprs = Exprs::new();
+    let messages = Messages::new();
+
     codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs {
         allow_non_definitions_at_root: true
     });
@@ -268,6 +267,7 @@ fn parse() {
         "messages was not empty:\n{}", messages.to_test_string(&codebase)
     );
 
+    let id = codebase.root();
     let ast_exprs = &codebase.fetch(id).ast().unwrap().0;
     assert_eq!(ast_exprs.len(), 2);
 

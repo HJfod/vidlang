@@ -176,6 +176,7 @@ impl DebugAstEq for Expr {
                     return_ty: a_return_ty,
                     body: a_body,
                     is_clip: a_is_clip,
+                    is_const: a_is_const,
                     span:_ 
                 },
                 Expr::Function {
@@ -185,6 +186,7 @@ impl DebugAstEq for Expr {
                     return_ty: b_return_ty,
                     body: b_body,
                     is_clip: b_is_clip,
+                    is_const: b_is_const,
                     span:_ 
                 },
             ) => {
@@ -194,6 +196,7 @@ impl DebugAstEq for Expr {
                 a_return_ty.debug_ast_assert_eq(b_return_ty, exprs.clone());
                 a_body.debug_ast_assert_eq(b_body, exprs.clone());
                 a_is_clip.debug_ast_assert_eq(b_is_clip, exprs.clone());
+                a_is_const.debug_ast_assert_eq(b_is_const, exprs.clone());
             }
             (
                 Expr::ArrowFunction {
