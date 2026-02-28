@@ -91,6 +91,12 @@ impl Expr {
             };
             return exprs.add(Expr::Float(num, span));
         }
+        if tokens.peek_duration() {
+            let Token::Duration(num, span) = tokens.expect_duration() else {
+                unreachable!("tokens.peek_duration() returned true but expect_duration() did not return a float");
+            };
+            return exprs.add(Expr::Duration(num, span));
+        }
         if tokens.peek_str() {
             let Token::String(value, span) = tokens.expect_str() else {
                 unreachable!("tokens.peek_str() returned true but expect_str() did not return a string");

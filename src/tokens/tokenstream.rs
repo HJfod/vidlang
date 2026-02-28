@@ -114,6 +114,12 @@ impl Tokens {
     pub fn expect_float(&mut self) -> Token {
         self.expect_no_attrs("float", |tk| matches!(tk, Token::Float(..)))
     }
+    pub fn peek_duration(&mut self) -> bool {
+        self.peek_no_attrs(|p| matches!(p, Token::Duration(..)))
+    }
+    pub fn expect_duration(&mut self) -> Token {
+        self.expect_no_attrs("duration", |tk| matches!(tk, Token::Duration(..)))
+    }
     pub fn peek_str(&mut self) -> bool {
         self.peek_no_attrs(|p| matches!(p, Token::String(..)))
     }

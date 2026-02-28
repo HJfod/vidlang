@@ -1,7 +1,7 @@
 
 use crate::{
     pools::{codebase::Span, exprs::{ExprId, Exprs}, names::NameId}, 
-    tokens::{token::Symbol, tokenstream::Tokens}
+    tokens::{token::{Duration, Symbol}, tokenstream::Tokens}
 };
 
 #[derive(Debug)]
@@ -51,6 +51,7 @@ pub enum Expr {
     Bool(bool, Span),
     Int(u64, Span),
     Float(f64, Span),
+    Duration(Duration, Span),
     String(Vec<StringComp>, Span),
     Ident(IdentPath),
     Tuple(Vec<ExprId>, Span),
@@ -138,6 +139,7 @@ impl Expr {
             Self::Bool(..) => true,
             Self::Int(..) => true,
             Self::Float(..) => true,
+            Self::Duration(..) => true,
             Self::String(..) => true,
             Self::Ident(..) => true,
             Self::Tuple(..) => true,
@@ -165,6 +167,7 @@ impl Expr {
             Self::Bool(_, span) => *span,
             Self::Int(_, span) => *span,
             Self::Float(_, span) => *span,
+            Self::Duration(_, span) => *span,
             Self::String(_, span) => *span,
             Self::Ident(ident) => ident.1,
             Self::Tuple(_, span) => *span,
