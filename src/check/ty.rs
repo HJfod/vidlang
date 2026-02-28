@@ -65,7 +65,7 @@ impl Checker {
             );
         }
         Item::Module {
-            name: names.add(&name),
+            name: names.add(name),
             definition: id,
             items,
         }

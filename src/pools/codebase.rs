@@ -103,7 +103,10 @@ impl Codebase {
                 continue;
             }
 
-            let sub_mod_name = path.file_stem().unwrap_or(path.as_os_str()).display().to_string();
+            // Directories use their full name (like `piece.of.blini`), while 
+            // files get the extension clipped off (`main.vid` -> `main`)
+            let sub_mod_path_stem = if path.is_dir() { path.file_name() } else { path.file_stem() };
+            let sub_mod_name = sub_mod_path_stem.unwrap_or(path.as_os_str()).display().to_string();
 
             // Check if a module with this name is already added (happens if 
             // you have both a directory named `cats` and a file named `cats.vid`

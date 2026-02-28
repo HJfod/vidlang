@@ -47,7 +47,7 @@ impl BracketType {
 #[strum(serialize_all="snake_case")]
 pub enum Symbol {
     // Keywords
-    Let, Const, Type, Function, Clip, Trait, Impl, Struct, Module,
+    Let, Const, Type, Function, Clip, Trait, Impl, Struct, Module, Unit,
     Private, Public, Ref,
     Match, If, Then, Else, While, For, In, Loop, Await, Return, Yield,
     And, Or,
@@ -106,10 +106,29 @@ pub enum Symbol {
     Exclamation,
 }
 
+impl Symbol {
+    pub fn is_reserved(self) -> bool {
+        matches!(self,
+            // maybe add support for custom units (px, %, etc.) in the future
+            Symbol::Unit | 
+            // add support for macros in the future
+            Symbol::Macro | Symbol::Codegen | 
+            // mayber add support for traits in the future (if I decide to add generics aswell)
+            Symbol::Trait | Symbol::Impl
+        )
+    }
+}
+
 #[derive(Debug)]
 pub enum StrLitComp {
     String(String),
     Component(Tokens),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Duration {
+    Seconds(f64),
+    Frames(u64),
 }
 
 #[derive(Debug)]
@@ -118,6 +137,7 @@ pub enum Token {
     // into an u64 instead for more precision
     Int(u64, Span),
     Float(f64, Span),
+    Duration(Duration, Span),
     String(Vec<StrLitComp>, Span),
     Ident(NameId, Span),
     Symbol(Symbol, Span),
@@ -130,6 +150,7 @@ impl Token {
         match self {
             Self::Int(_, span) => *span,
             Self::Float(_, span) => *span,
+            Self::Duration(_, span) => *span,
             Self::String(_, span) => *span,
             Self::Ident(_, span) => *span,
             Self::Symbol(_, span) => *span,
@@ -141,6 +162,7 @@ impl Token {
         match self {
             Self::Int(..)           => "integer",
             Self::Float(..)         => "float",
+            Self::Duration(..)      => "duration",
             Self::String(..)        => "string",
             Self::Ident(..)         => "identifier",
             Self::Symbol(..)        => "keyword or operator",

@@ -2,8 +2,8 @@
 use std::str::FromStr;
 
 use crate::{pools::{
-    codebase::SrcIterator, messages::{Message, Messages}, names::Names
-}, tokens::{token::{BracketType, StrLitComp, Symbol, Token}, tokenstream::Tokens}};
+    codebase::{Span, SrcIterator}, messages::{Message, Messages}, names::Names
+}, tokens::{token::{BracketType, Duration, StrLitComp, Symbol, Token}, tokenstream::Tokens}};
 use unicode_xid::UnicodeXID;
 
 pub struct Tokenizer<'s> {
@@ -33,6 +33,17 @@ impl<'s> Tokenizer<'s> {
             else {
                 break;
             }
+        }
+    }
+    fn peek_and_next_ident(&mut self) -> Option<(String, Span)> {
+        if self.iter.peek().is_some_and(|c| c.is_xid_start()) {
+            let start = self.iter.index();
+            let c = self.iter.next().unwrap();
+            let rest = self.iter.next_while(UnicodeXID::is_xid_continue);
+            Some((String::from(c) + &rest, self.iter.span_from(start)))
+        }
+        else {
+            None
         }
     }
 }
@@ -143,28 +154,54 @@ impl<'s> Iterator for Tokenizer<'s> {
             if self.iter.peek() == Some('.') {
                 num_str.push(self.iter.next().unwrap());
                 num_str.push_str(&self.iter.next_while(|c| c.is_ascii_digit()));
-                let span = self.iter.span_from(start);
-                match num_str.parse::<f64>() {
-                    Ok(v) => return Some(Token::Float(v, span)),
-                    Err(e) => {
-                        self.messages.add(Message::new_error(
-                            format!("invalid float literal: {e}"),
-                            span
-                        ));
-                    }
+            }
+            let num_span = self.iter.span_from(start);
+            let maybe_unit = self.peek_and_next_ident();
+
+            // Some helpers
+            let parse_as_f64 = || match num_str.parse::<f64>() {
+                Ok(v) => v,
+                Err(e) => {
+                    self.messages.add(Message::new_error(format!("invalid number: {e}"), num_span));
+                    0.0
                 }
+            };
+            let parse_as_u64 = || match num_str.parse::<u64>() {
+                Ok(v) => v,
+                Err(e) => {
+                    self.messages.add(Message::new_error(format!("invalid integer: {e}"), num_span));
+                    0
+                }
+            };
+
+            // Units
+            if let Some((unit, unit_span)) = maybe_unit {
+                let require_as_u64 = || if num_str.contains('.') {
+                    self.messages.add(Message::new_error(
+                        format!("unit {unit} may only be specified on integers"),
+                        unit_span
+                    ));
+                    0
+                }
+                else {
+                    parse_as_u64()
+                };
+                return Some(Token::Duration(match unit.as_str() {
+                    "ms"             => Duration::Seconds(parse_as_f64() / 1000.0),
+                    "s"              => Duration::Seconds(parse_as_f64()),
+                    "frm" | "frames" => Duration::Frames(require_as_u64()),
+                    _ => {
+                        self.messages.add(Message::new_error(format!("unknown unit {unit}"), unit_span));
+                        Duration::Frames(0)
+                    }
+                }, self.iter.span_from(start)));
+            }
+            // Otherwise parse float if the token was one
+            if num_str.contains('.') {
+                return Some(Token::Float(parse_as_f64(), num_span))
             }
             // Otherwise this is an integer
-            let span = self.iter.span_from(start);
-            match num_str.parse::<u64>() {
-                Ok(v) => return Some(Token::Int(v, span)),
-                Err(e) => {
-                    self.messages.add(Message::new_error(
-                        format!("invalid integer literal: {e}"),
-                        span
-                    ));
-                }
-            }
+            return Some(Token::Int(parse_as_u64(), num_span));
         }
 
         // Identifiers & keywords
@@ -173,7 +210,19 @@ impl<'s> Iterator for Tokenizer<'s> {
             let ident = String::from(c) + &self.iter.next_while(UnicodeXID::is_xid_continue);
             let span = self.iter.span_from(start);
             return Some(match Symbol::from_str(&ident) {
-                Ok(sym) => Token::Symbol(sym, span),
+                Ok(sym) => {
+                    // Return reserved keywords as identifiers
+                    if sym.is_reserved() {
+                        self.messages.add(Message::new_error(
+                            format!("keyword '{sym}' is reserved"),
+                            span
+                        ));
+                        Token::Ident(self.names.add(&ident), span)
+                    }
+                    else {
+                        Token::Symbol(sym, span)
+                    }
+                }
                 Err(_) => Token::Ident(self.names.add(&ident), span),
             });
         }
@@ -209,17 +258,14 @@ impl<'s> Iterator for Tokenizer<'s> {
 
         // Attributes
         if c == '@' {
-            let ident = if self.iter.peek().is_some_and(|c| c.is_xid_start()) {
-                self.iter.next();
-                self.names.add(&(
-                    String::from(c) + &self.iter.next_while(UnicodeXID::is_xid_continue)
-                ))
-            }
-            else {
-                self.messages.add(Message::expected_what(
-                    "identifier for attribute", self.iter.head()
-                ));
-                self.names.missing()
+            let ident = match self.peek_and_next_ident() {
+                Some(i) => self.names.add(&i.0),
+                None => {
+                    self.messages.add(Message::expected_what(
+                        "identifier for attribute", self.iter.head()
+                    ));
+                    self.names.missing()
+                }
             };
             // Args for attributes
             let args = self.iter.peek().is_some_and(|c| c == '(').then(|| {
@@ -319,6 +365,7 @@ fn tokenizer() {
     let names = Names::new();
     let messages = Messages::new();
     let (codebase, id) = Codebase::new_with_test_package("test_tokenizer", r#"
+        // This is a comment and it should not show up!
         let x += 5;
     "#);
     let tokens = codebase.tokenize(id, names, messages.clone()).unwrap().collect::<Vec<_>>();
@@ -329,4 +376,26 @@ fn tokenizer() {
     assert!(matches!(tokens[2], Token::Symbol(Symbol::AddAssign, _)));
     assert!(matches!(tokens[3], Token::Int(_, _)));
     assert!(matches!(tokens[4], Token::Symbol(Symbol::Semicolon, _)));
+}
+
+#[test]
+fn units() {
+    use crate::pools::codebase::Codebase;
+    let names = Names::new();
+    let messages = Messages::new();
+
+    let (codebase, id) = Codebase::new_with_test_package(
+        "units",
+        r#"
+            5s 60.6ms 17frames
+            10.2frames 20unknown
+        "#
+    );
+    let mut tokens = codebase.tokenize(id, names, messages.clone()).unwrap();
+    assert!(matches!(tokens.next(), Some(Token::Duration(Duration::Seconds(5.0), _))));
+    assert!(matches!(tokens.next(), Some(Token::Duration(Duration::Seconds(0.0606), _))));
+    assert!(matches!(tokens.next(), Some(Token::Duration(Duration::Frames(17), _))));
+    assert!(matches!(tokens.next(), Some(Token::Duration(_, _))));
+    assert!(matches!(tokens.next(), Some(Token::Duration(_, _))));
+    assert!(messages.count_total() == 2, "{messages:?}");
 }
