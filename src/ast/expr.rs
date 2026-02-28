@@ -218,20 +218,18 @@ fn invalid_parses() {
     use crate::pools::names::Names;
 
     let test_expr = |data: &str| {
-        let mut codebase = Codebase::from_memory("invalid_parses", data).unwrap();
-
+        let (mut codebase, id) = Codebase::new_with_test_package("invalid_parses", data);
         let names = Names::new();
         let messages = Messages::new();
         let exprs = Exprs::new();
         codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs {
             allow_non_definitions_at_root: true,
         });
-
         assert!(
             messages.counts().0 > 0,
             "`{data}` didn't result in errors:\n{}\ninstead got ast: {:#?}",
             messages.to_test_string(&codebase),
-            codebase.fetch(codebase.root()).ast()
+            codebase.get_ast_for(id)
         );
     };
 
@@ -249,12 +247,12 @@ fn parse() {
     use crate::pools::messages::Messages;
     use crate::utils::tests::DebugAstEq;
 
-    let mut codebase = Codebase::from_memory("test_parse", r#"
+    let (mut codebase, id) = Codebase::new_with_test_package("test_parse", r#"
         let x = 8;
         if x > 5 {
             x += lib::hi_guys();
         }
-    "#).unwrap();
+    "#);
     let names = Names::new();
     let exprs = Exprs::new();
     let messages = Messages::new();
@@ -267,8 +265,7 @@ fn parse() {
         "messages was not empty:\n{}", messages.to_test_string(&codebase)
     );
 
-    let id = codebase.root();
-    let ast_exprs = &codebase.fetch(id).ast().unwrap().0;
+    let ast_exprs = &codebase.get_ast_for(id).unwrap().0;
     assert_eq!(ast_exprs.len(), 2);
 
     ast_exprs.debug_ast_assert_eq(

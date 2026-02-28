@@ -156,10 +156,10 @@ fn parse_arrow_function() {
     use crate::pools::names::Names;
     use crate::pools::messages::Messages;
 
-    let mut codebase = Codebase::from_memory("parse_arrow_function", r#"
+    let (mut codebase, _) = Codebase::new_with_test_package("parse_arrow_function", r#"
         let x = (a, b) => a + b;
         let y = a => a;
-    "#).unwrap();
+    "#);
 
     let names = Names::new();
     let exprs = Exprs::new();

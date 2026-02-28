@@ -116,7 +116,7 @@ impl Messages {
             if let Some(span) = msg.span {
                 formatted.push_str(&format!(
                     "[{}:{}..{}] ",
-                    codebase.fetch(span.id()).name(),
+                    codebase.get_full_mod_name(span.id()),
                     span.start(), span.end(),
                 ));
             }

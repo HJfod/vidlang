@@ -202,13 +202,13 @@ fn tokenizing() {
     
     let names = Names::new();
     let messages = Messages::new();
-    let codebase = Codebase::from_memory("test_tokenizer", r#"
+    let (codebase, id) = Codebase::new_with_test_package("test_tokenizer", r#"
         let x += -5 + 2.3;
         @thing("dawg", 5.2)
         "Hello, world!\n\t";
-    "#).unwrap();
+    "#);
 
-    let mut tokens = codebase.fetch(codebase.root()).tokenize(names, messages.clone()).unwrap();
+    let mut tokens = codebase.tokenize(id, names, messages.clone()).unwrap();
     tokens.expect_symbol(Symbol::Let);
     tokens.expect_ident();
     tokens.expect_symbol(Symbol::AddAssign);

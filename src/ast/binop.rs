@@ -300,15 +300,13 @@ fn ambiguous_exprs() {
     use crate::pools::names::Names;
 
     let test_expr = |data: &str| {
-        let mut codebase = Codebase::from_memory("test_ambiguous_exprs", data).unwrap();
-
+        let (mut codebase, _) = Codebase::new_with_test_package("test_ambiguous_exprs", data);
         let names = Names::new();
         let messages = Messages::new();
         let exprs = Exprs::new();
         codebase.parse_all(names.clone(), messages.clone(), exprs, ParseArgs {
             allow_non_definitions_at_root: true,
         });
-
         assert_eq!(
             messages.counts().0, 1,
             "`{data}` didn't result in one error:\n{}", messages.to_test_string(&codebase)
@@ -328,7 +326,7 @@ fn binop() {
     use crate::pools::names::Names;
     use crate::utils::tests::DebugAstEq;
 
-    let mut codebase = Codebase::from_memory("test_binop", "1 + 2 * 3 ** 4 - 5 + 6").unwrap();
+    let (mut codebase, id) = Codebase::new_with_test_package("test_binop", "1 + 2 * 3 ** 4 - 5 + 6");
 
     let names = Names::new();
     let messages = Messages::new();
@@ -342,8 +340,7 @@ fn binop() {
         "messages was not empty:\n{}", messages.to_test_string(&codebase)
     );
 
-    let id = codebase.root();
-    let ast = codebase.fetch(id).ast().unwrap().exprs();
+    let ast = codebase.get_ast_for(id).unwrap().exprs();
     assert_eq!(ast.len(), 1);
 
     let make_shit_up = |op: Symbol, lhs: ExprId, rhs: ExprId| exprs.add(Expr::Call {

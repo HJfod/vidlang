@@ -1,7 +1,7 @@
 #![feature(new_range_api)]
 
 use clap::Parser;
-use crate::{ast::expr::ParseArgs, pools::{codebase::{Codebase, CodebaseCreateError}, exprs::Exprs, messages::Messages, names::Names}};
+use crate::{ast::expr::ParseArgs, pools::{codebase::{Codebase, PackageAddError}, exprs::Exprs, messages::Messages, names::Names}};
 
 mod ast;
 mod pools;
@@ -16,19 +16,19 @@ struct CliArgs {
 fn main() {
     let dir = std::env::current_dir().expect("Unable to get current directory");
     
-    let messages = Messages::new();
-    let names = Names::new();
-    let exprs = Exprs::new();
-    let mut codebase = match Codebase::from_dir(&dir) {
+    let mut codebase = Codebase::new();
+    match codebase.add_package("project".into(), &dir) {
         Ok(c) => c,
         Err(e) => match e {
-            CodebaseCreateError::CantFindRoot => panic!("unable to find {}/main.vid!", dir.display()),
-            CodebaseCreateError::UnableToReadFile(p, e) => panic!("unable to read file {}: {e}", p.display()),
-            CodebaseCreateError::UnableToReadDir(p, e) => panic!("unable to read directory {}: {e}", p.display()),
-            CodebaseCreateError::DuplicateNamedModule(e) => panic!("multiple modules with the same name found: {e}"),
+            PackageAddError::UnableToReadFile(p, e) => panic!("unable to read file {}: {e}", p.display()),
+            PackageAddError::UnableToReadDir(p, e) => panic!("unable to read directory {}: {e}", p.display()),
+            PackageAddError::DuplicateNamedPackage(e) => panic!("multiple packages with the same name found: {e}"),
         }
     };
 
+    let messages = Messages::new();
+    let names = Names::new();
+    let exprs = Exprs::new();
     codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs::default());
 
     messages.release(&codebase, |msg| println!("{}", msg));

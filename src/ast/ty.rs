@@ -14,9 +14,9 @@ fn type_parse() {
     use crate::pools::names::Names;
     use crate::pools::messages::Messages;
 
-    let mut codebase = Codebase::from_memory("test_type_parse", r#"
+    let (mut codebase, _) = Codebase::new_with_test_package("test_type_parse", r#"
         let x: A::B::C;
-    "#).unwrap();
+    "#);
     let names = Names::new();
     let exprs = Exprs::new();
     let messages = Messages::new();

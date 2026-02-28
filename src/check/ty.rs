@@ -45,23 +45,27 @@ pub enum Item {
 }
 
 pub struct Checker {
-    root_module: Item,
+    package_roots: HashMap<String, Item>,
 }
 
 impl Checker {
     pub fn new(codebase: &Codebase, names: Names) -> Self {
-        Self { root_module: Self::make_submodule(codebase, names, codebase.root()) }
+        Self {
+            package_roots: codebase.packages()
+                .map(|p| (p.0.to_owned(), Self::make_submodule(codebase, names.clone(), p.0, p.1)))
+                .collect()
+        }
     }
-    fn make_submodule(codebase: &Codebase, names: Names, id: ModId) -> Item {
+    fn make_submodule(codebase: &Codebase, names: Names, name: &str, id: ModId) -> Item {
         let mut items = HashMap::new();
-        for sub in codebase.submodules(id) {
+        for (name, sub) in codebase.get_submodules_for(id) {
             items.insert(
-                names.add(&codebase.fetch(sub).name()), 
-                Self::make_submodule(codebase, names.clone(), sub)
+                names.add(name),
+                Self::make_submodule(codebase, names.clone(), name, sub)
             );
         }
         Item::Module {
-            name: names.add(&codebase.fetch(id).name()),
+            name: names.add(&name),
             definition: id,
             items,
         }
