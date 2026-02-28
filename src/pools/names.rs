@@ -1,5 +1,4 @@
-use std::sync::{Arc, Mutex};
-use crate::{ast::expr::{Ident, IdentPath}, pools::codebase::Span, tokens::token::Symbol};
+use crate::{ast::expr::{Ident, IdentPath}, pools::{PoolRef, codebase::Span}, tokens::token::Symbol};
 use string_interner::{self, StringInterner, backend::StringBackend};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -14,44 +13,40 @@ impl string_interner::Symbol for NameId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Names {
     // BufferBackend might be a good choice too since resolving the names will 
     // be rare and mostly for errors
-    names: Arc<Mutex<StringInterner<StringBackend<NameId>>>>,
+    names: StringInterner<StringBackend<NameId>>,
 }
 
 impl Names {
-    pub fn new() -> Self {
-        Self {
-            names: Arc::from(Mutex::new(StringInterner::new()))
-        }
+    pub fn new() -> PoolRef<Self> {
+        PoolRef::new(Self {
+            names: StringInterner::new()
+        })
     }
-    pub fn add(&self, name: &str) -> NameId {
-        self.names.lock().unwrap()
-            .get_or_intern(name)
+    pub fn add(&mut self, name: &str) -> NameId {
+        self.names.get_or_intern(name)
     }
-    pub fn fetch(&self, id: NameId) -> String {
-        self.names.lock().unwrap()
-            .resolve(id)
-            .expect("Names has handed out an invalid NameId (somehow)")
-            .to_string()
+    pub fn get(&self, id: NameId) -> &str {
+        self.names.resolve(id).expect("Names has handed out an invalid NameId (somehow)")
     }
 
-    pub fn missing(&self) -> NameId {
+    pub fn missing(&mut self) -> NameId {
         self.add("<missing name>")
     }
-    pub fn missing_path(&self, span: Span) -> IdentPath {
+    pub fn missing_path(&mut self, span: Span) -> IdentPath {
         IdentPath(vec![Ident(self.missing(), span)], span)
     }
-    fn make_op_path(&self, func: &str, span: Span) -> IdentPath {
+    fn make_op_path(&mut self, func: &str, span: Span) -> IdentPath {
         IdentPath(vec![
             Ident(self.add("std"), span),
             Ident(self.add("ops"), span),
             Ident(self.add(func), span),
         ], span)
     }
-    pub fn builtin_unop_name(&self, op: Symbol, span: Span) -> IdentPath {
+    pub fn builtin_unop_name(&mut self, op: Symbol, span: Span) -> IdentPath {
         match op {
             // Unary plus is not real (since Rust also doesn't have it and I think 
             // they're base for doing so)
@@ -60,7 +55,7 @@ impl Names {
             _ => panic!("invalid op passed to builtin_unop_name"),
         }
     }
-    pub fn builtin_binop_name(&self, op: Symbol, span: Span) -> IdentPath {
+    pub fn builtin_binop_name(&mut self, op: Symbol, span: Span) -> IdentPath {
         match op {
             Symbol::Power => self.make_op_path("power", span),
 

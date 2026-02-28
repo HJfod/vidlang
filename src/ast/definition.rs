@@ -6,7 +6,7 @@ use crate::{
 };
 
 impl Expr {
-    pub(super) fn parse_function_param(parser: &mut Parser<'_>)
+    pub(super) fn parse_function_param(parser: &mut Parser)
      -> FunctionParam
     {
         let kind;
@@ -27,7 +27,7 @@ impl Expr {
         FunctionParam { kind, name, ty, default_value }
     }
 
-    pub(super) fn try_parse_definition(parser: &mut Parser<'_>) -> Option<ExprId> {
+    pub(super) fn try_parse_definition(parser: &mut Parser) -> Option<ExprId> {
         let start = parser.tokens.start();
 
         let is_vis_modifier = |sym| matches!(sym, Symbol::Private | Symbol::Public);
@@ -37,7 +37,7 @@ impl Expr {
         let mut found_explicit_vis = None;
         while let Some((sym, span)) = parser.tokens.peek_and_expect_symbol_of(is_vis_modifier) {
             if found_explicit_vis.is_some() {
-                parser.tokens.messages().add(Message::new_error(
+                parser.tokens.messages.lock_mut().add(Message::new_error(
                     "only one visibility modifier may be used per definition",
                     span
                 ));
@@ -53,7 +53,7 @@ impl Expr {
 
         // Check if there are visibility modifiers (aka wrong order)
         while let Some((_, span)) = parser.tokens.peek_and_expect_symbol_of(is_vis_modifier) {
-            parser.tokens.messages().add(Message::new_error(
+            parser.tokens.messages.lock_mut().add(Message::new_error(
                 "visibility modifiers must go before const specifier",
                 span
             ));
@@ -62,7 +62,7 @@ impl Expr {
         // Modules
         if parser.tokens.peek_and_expect_symbol(Symbol::Module) {
             if is_const {
-                parser.tokens.messages().add(Message::new_error(
+                parser.tokens.messages.lock_mut().add(Message::new_error(
                     "modules may not be marked const",
                     is_const_span,
                 ));
@@ -74,7 +74,7 @@ impl Expr {
             else {
                 Vec::new()
             };
-            return Some(parser.exprs.add(Expr::Module { name, items, span: parser.tokens.span_from(start) }))
+            return Some(parser.exprs.lock_mut().add(Expr::Module { name, items, span: parser.tokens.span_from(start) }))
         }
 
         // Function or clip definition
@@ -91,7 +91,7 @@ impl Expr {
                 .then(|| {
                     // Note: If I add object types this'll fail
                     if parser.tokens.peek_bracketed(BracketType::Braces) {
-                        parser.tokens.messages().add(Message::expected_what(
+                        parser.tokens.messages.lock_mut().add(Message::expected_what(
                             "expected return type",
                             parser.tokens.last_span()
                         ));
@@ -103,9 +103,9 @@ impl Expr {
 
             // Clips have special wacky types
             if let Some(ref ret) = return_ty && sym == Symbol::Clip {
-                parser.tokens.messages().add(Message::new_error(
+                parser.tokens.messages.lock_mut().add(Message::new_error(
                     "clips may not have explicit return types",
-                    parser.exprs.exec(*ret, |e| e.span())
+                    parser.exprs.lock().get(*ret).span()
                 ));
             }
 
@@ -116,7 +116,7 @@ impl Expr {
             else {
                 Expr::parse_block(parser)
             };
-            return Some(parser.exprs.add(Expr::Function {
+            return Some(parser.exprs.lock_mut().add(Expr::Function {
                 visibility,
                 name, params, return_ty, body,
                 is_clip: sym == Symbol::Clip,
@@ -133,7 +133,7 @@ impl Expr {
                 .then(|| Expr::parse_type(parser));
             let value = parser.tokens.peek_and_expect_symbol(Symbol::Assign)
                 .then(|| Expr::parse(parser));
-            return Some(parser.exprs.add(Expr::Var {
+            return Some(parser.exprs.lock_mut().add(Expr::Var {
                 visibility,
                 name, ty, value,
                 span: parser.tokens.span_from(start),
@@ -147,12 +147,12 @@ impl Expr {
             // This purposefully doesn't consume, since this function returns 
             // an Option, so its caller will continue consuming. Not consuming 
             // here allows for possible error recovery
-            parser.tokens.messages().add(Message::expected_what("definition", span.next_ch()));
+            parser.tokens.messages.lock_mut().add(Message::expected_what("definition", span.next_ch()));
         }
         
         None
     }
-    pub(super) fn parse_definition(parser: &mut Parser<'_>) -> ExprId {
+    pub(super) fn parse_definition(parser: &mut Parser) -> ExprId {
         match Self::try_parse_definition(parser) {
             Some(v) => v,
             None => {
@@ -161,7 +161,7 @@ impl Expr {
                 // result in less errors overall
                 let bad_expr = Expr::parse(parser);
                 let span = parser.tokens.span_from(start);
-                parser.tokens.messages().add(Message::new_error("only definitions may appear here", span));
+                parser.tokens.messages.lock_mut().add(Message::new_error("only definitions may appear here", span));
                 bad_expr
             }
         }
@@ -189,7 +189,7 @@ fn parse_arrow_function() {
     });
 
     assert_eq!(
-        messages.count_total(), 0,
-        "messages was not empty:\n{}", messages.to_test_string(&codebase)
+        messages.lock().count_total(), 0,
+        "messages was not empty:\n{}", messages.lock().to_test_string(&codebase)
     );
 }

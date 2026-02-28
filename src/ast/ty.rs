@@ -1,26 +1,26 @@
 use crate::{ast::expr::{Expr, Parser}, pools::exprs::ExprId, tokens::token::{BracketType, Symbol, Token}};
 
 impl Expr {
-    pub(super) fn parse_type(parser: &mut Parser<'_>) -> ExprId {
+    pub(super) fn parse_type(parser: &mut Parser) -> ExprId {
         let start = parser.tokens.start();
 
         // Array types `[Thing]`
         if parser.tokens.peek_bracketed(BracketType::Brackets) {
             let inner = match parser.tokens.expect_bracketed(BracketType::Brackets) {
                 Token::Bracketed(_, mut content, _) => Expr::parse_type(&mut parser.fork(&mut content)),
-                _ => parser.exprs.add(Expr::Ident(parser.tokens.names().missing_path(parser.tokens.span_from(start)))),
+                _ => parser.exprs.lock_mut().add(Expr::Ident(parser.tokens.names.lock_mut().missing_path(parser.tokens.span_from(start)))),
             };
-            return parser.exprs.add(Expr::TyArray { inner, span: parser.tokens.span_from(start) });
+            return parser.exprs.lock_mut().add(Expr::TyArray { inner, span: parser.tokens.span_from(start) });
         }
 
         // Anytype (special thing for specific overloads)
         if parser.tokens.peek_and_expect_symbol(Symbol::Anytype) {
-            return parser.exprs.add(Expr::TyAny(parser.tokens.span_from(start)));
+            return parser.exprs.lock_mut().add(Expr::TyAny(parser.tokens.span_from(start)));
         }
 
         // Normal named type
         let name = Expr::parse_ident_path(parser);
-        parser.exprs.add(Expr::TyNamed { name, span: parser.tokens.span_from(start) })
+        parser.exprs.lock_mut().add(Expr::TyNamed { name, span: parser.tokens.span_from(start) })
     }
 }
 
@@ -45,7 +45,7 @@ fn type_parse() {
         allow_non_definitions_at_root: true
     });
     assert_eq!(
-        messages.count_total(), 0,
-        "messages was not empty:\n{}", messages.to_test_string(&codebase)
+        messages.lock().count_total(), 0,
+        "messages was not empty:\n{}", messages.lock().to_test_string(&codebase)
     );
 }

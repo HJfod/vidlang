@@ -2,18 +2,18 @@
 use std::str::FromStr;
 
 use crate::{pools::{
-    codebase::{Span, SrcIterator}, messages::{Message, Messages}, names::Names
+    PoolRef, codebase::{Span, SrcIterator}, messages::{Message, Messages}, names::Names
 }, tokens::{token::{BracketType, Duration, StrLitComp, Symbol, Token}, tokenstream::Tokens}};
 use unicode_xid::UnicodeXID;
 
 pub struct Tokenizer<'s> {
     iter: &'s mut SrcIterator<'s>,
-    names: Names,
-    messages: Messages,
+    names: PoolRef<Names>,
+    messages: PoolRef<Messages>,
 }
 
 impl<'s> Tokenizer<'s> {
-    pub fn new(iter: &'s mut SrcIterator<'s>, names: Names, messages: Messages) -> Self {
+    pub fn new(iter: &'s mut SrcIterator<'s>, names: PoolRef<Names>, messages: PoolRef<Messages>) -> Self {
         Self { iter, names, messages }
     }
     fn skip_to_next(&mut self) {
@@ -68,7 +68,7 @@ impl<'s> Iterator for Tokenizer<'s> {
             let mut comps = Vec::new();
             'parse_comps: loop {
                 let Some(c) = self.iter.next() else {
-                    self.messages.add(Message::expected(
+                    self.messages.lock_mut().add(Message::expected(
                         "closing quote", "eof", self.iter.head()
                     ));
                     break 'parse_comps;
@@ -91,7 +91,7 @@ impl<'s> Iterator for Tokenizer<'s> {
                         }
                         // No need to check for EOF since this checks it for us
                         let Some(tk) = self.next() else {
-                            self.messages.add(Message::expected(
+                            self.messages.lock_mut().add(Message::expected(
                                 "closing brace", "eof", self.iter.head()
                             ));
                             break 'parse_comps;
@@ -108,7 +108,7 @@ impl<'s> Iterator for Tokenizer<'s> {
                     let char_to_push = match c {
                         '\\' => {
                             let Some(escaped) = self.iter.next() else {
-                                self.messages.add(Message::expected(
+                                self.messages.lock_mut().add(Message::expected(
                                     "escaped character", "eof", self.iter.head()
                                 ));
                                 break 'parse_comps;
@@ -123,7 +123,7 @@ impl<'s> Iterator for Tokenizer<'s> {
                                 '{'  => '{',
                                 '}'  => '}',
                                 c => {
-                                    self.messages.add(Message::new_error(
+                                    self.messages.lock_mut().add(Message::new_error(
                                         format!("unknown escape sequence \"\\{c}\""),
                                         self.iter.span_from(char_start)
                                     ));
@@ -162,14 +162,14 @@ impl<'s> Iterator for Tokenizer<'s> {
             let parse_as_f64 = || match num_str.parse::<f64>() {
                 Ok(v) => v,
                 Err(e) => {
-                    self.messages.add(Message::new_error(format!("invalid number: {e}"), num_span));
+                    self.messages.lock_mut().add(Message::new_error(format!("invalid number: {e}"), num_span));
                     0.0
                 }
             };
             let parse_as_u64 = || match num_str.parse::<u64>() {
                 Ok(v) => v,
                 Err(e) => {
-                    self.messages.add(Message::new_error(format!("invalid integer: {e}"), num_span));
+                    self.messages.lock_mut().add(Message::new_error(format!("invalid integer: {e}"), num_span));
                     0
                 }
             };
@@ -177,7 +177,7 @@ impl<'s> Iterator for Tokenizer<'s> {
             // Units
             if let Some((unit, unit_span)) = maybe_unit {
                 let require_as_u64 = || if num_str.contains('.') {
-                    self.messages.add(Message::new_error(
+                    self.messages.lock_mut().add(Message::new_error(
                         format!("unit {unit} may only be specified on integers"),
                         unit_span
                     ));
@@ -191,7 +191,7 @@ impl<'s> Iterator for Tokenizer<'s> {
                     "s"              => Duration::Seconds(parse_as_f64()),
                     "frm" | "frames" => Duration::Frames(require_as_u64()),
                     _ => {
-                        self.messages.add(Message::new_error(format!("unknown unit {unit}"), unit_span));
+                        self.messages.lock_mut().add(Message::new_error(format!("unknown unit {unit}"), unit_span));
                         Duration::Frames(0)
                     }
                 }, self.iter.span_from(start)));
@@ -213,17 +213,17 @@ impl<'s> Iterator for Tokenizer<'s> {
                 Ok(sym) => {
                     // Return reserved keywords as identifiers
                     if sym.is_reserved() {
-                        self.messages.add(Message::new_error(
+                        self.messages.lock_mut().add(Message::new_error(
                             format!("keyword '{sym}' is reserved"),
                             span
                         ));
-                        Token::Ident(self.names.add(&ident), span)
+                        Token::Ident(self.names.lock_mut().add(&ident), span)
                     }
                     else {
                         Token::Symbol(sym, span)
                     }
                 }
-                Err(_) => Token::Ident(self.names.add(&ident), span),
+                Err(_) => Token::Ident(self.names.lock_mut().add(&ident), span),
             });
         }
 
@@ -240,7 +240,7 @@ impl<'s> Iterator for Tokenizer<'s> {
                     break;
                 }
                 let Some(tk) = self.next() else {
-                    self.messages.add(Message::expected(
+                    self.messages.lock_mut().add(Message::expected(
                         format!("'{}'", ty.close()), "eof", self.iter.head()
                     ));
                     break;
@@ -259,12 +259,12 @@ impl<'s> Iterator for Tokenizer<'s> {
         // Attributes
         if c == '@' {
             let ident = match self.peek_and_next_ident() {
-                Some(i) => self.names.add(&i.0),
+                Some(i) => self.names.lock_mut().add(&i.0),
                 None => {
-                    self.messages.add(Message::expected_what(
+                    self.messages.lock_mut().add(Message::expected_what(
                         "identifier for attribute", self.iter.head()
                     ));
-                    self.names.missing()
+                    self.names.lock_mut().missing()
                 }
             };
             // Args for attributes
@@ -314,7 +314,7 @@ impl<'s> Iterator for Tokenizer<'s> {
             Ok(sym) => Some(Token::Symbol(sym, self.iter.span_from(start))),
             // Simply skip invalid characters
             Err(_) => {
-                self.messages.add(Message::new_error(
+                self.messages.lock_mut().add(Message::new_error(
                     format!("invalid symbol '{}'", sym),
                     self.iter.span_from(start)
                 ));
@@ -349,12 +349,12 @@ fn strings() {
     assert_matches!(interp.next(), Some(StrLitComp::String(s)) if s == "String with ");
     assert_matches!(interp.next(),
         Some(StrLitComp::Component(tks)) if tks.peek_n(1).is_none() &&
-            matches!(tks.peek(), Some(Token::Ident(name, _)) if *name == names.add("interpolation"))
+            matches!(tks.peek(), Some(Token::Ident(name, _)) if *name == names.lock_mut().add("interpolation"))
     );
     assert_matches!(interp.next(), Some(StrLitComp::String(s)) if s == " and ");
     assert_matches!(interp.next(),
         Some(StrLitComp::Component(tks)) if tks.peek_n(1).is_none() &&
-            matches!(tks.peek(), Some(Token::Ident(name, _)) if *name == names.add("stuff"))
+            matches!(tks.peek(), Some(Token::Ident(name, _)) if *name == names.lock_mut().add("stuff"))
     );
     assert_matches!(interp.next(), Some(StrLitComp::Component(tks)) if tks.peek().is_none());
 }
@@ -369,7 +369,7 @@ fn tokenizer() {
         let x += 5;
     "#);
     let tokens = codebase.tokenize(id, names, messages.clone()).unwrap().collect::<Vec<_>>();
-    assert!(messages.count_total() == 0, "{messages:?}");
+    assert!(messages.lock().count_total() == 0, "{messages:?}");
     assert_eq!(tokens.len(), 5);
     assert!(matches!(tokens[0], Token::Symbol(Symbol::Let, _)));
     assert!(matches!(tokens[1], Token::Ident(_, _)));
@@ -397,5 +397,5 @@ fn units() {
     assert!(matches!(tokens.next(), Some(Token::Duration(Duration::Frames(17), _))));
     assert!(matches!(tokens.next(), Some(Token::Duration(_, _))));
     assert!(matches!(tokens.next(), Some(Token::Duration(_, _))));
-    assert!(messages.count_total() == 2, "{messages:?}");
+    assert!(messages.lock().count_total() == 2, "{messages:?}");
 }

@@ -5,7 +5,7 @@ use crate::{
 }};
 
 impl Expr {
-    pub(super) fn parse_ident_path(parser: &mut Parser<'_>) -> IdentPath {
+    pub(super) fn parse_ident_path(parser: &mut Parser) -> IdentPath {
         // All ident paths must have at least one ident to them
         let start = parser.tokens.start();
         let mut res = vec![parser.tokens.expect_ident()];
@@ -15,7 +15,7 @@ impl Expr {
         IdentPath(res, parser.tokens.span_from(start))
     }
 
-    pub(super) fn parse_value(parser: &mut Parser<'_>) -> ExprId {
+    pub(super) fn parse_value(parser: &mut Parser) -> ExprId {
         // Arrow functions
         if (
             parser.tokens.peek_bracketed(BracketType::Parentheses) || 
@@ -47,13 +47,13 @@ impl Expr {
                 unreachable!("a symbol was previously peeked but parser.tokens.next() did not return one");
             };
             if sym == Symbol::Arrow {
-                parser.tokens.messages().add(Message::new_error(
+                parser.tokens.messages.lock_mut().add(Message::new_error(
                     "arrow functions are defined with `=>`, not `->`",
                     sym_span
                 ));
             }
             let body = Expr::parse(parser);
-            return parser.exprs.add(Expr::ArrowFunction {
+            return parser.exprs.lock_mut().add(Expr::ArrowFunction {
                 params, body, span: parser.tokens.span_from(start) }
             );
         }
@@ -73,31 +73,31 @@ impl Expr {
             let Some(Token::Symbol(sym, span)) = parser.tokens.next() else {
                 unreachable!("parser.tokens.peek_symbol returned true but next() did not return a symbol");
             };
-            return parser.exprs.add(Expr::Bool(sym == Symbol::True, span));
+            return parser.exprs.lock_mut().add(Expr::Bool(sym == Symbol::True, span));
         }
         if parser.tokens.peek_int() {
             let Token::Int(num, span) = parser.tokens.expect_int() else {
                 unreachable!("parser.tokens.peek_int() returned true but expect_int() did not return an integer");
             };
-            return parser.exprs.add(Expr::Int(num, span));
+            return parser.exprs.lock_mut().add(Expr::Int(num, span));
         }
         if parser.tokens.peek_float() {
             let Token::Float(num, span) = parser.tokens.expect_float() else {
                 unreachable!("parser.tokens.peek_float() returned true but expect_float() did not return a float");
             };
-            return parser.exprs.add(Expr::Float(num, span));
+            return parser.exprs.lock_mut().add(Expr::Float(num, span));
         }
         if parser.tokens.peek_duration() {
             let Token::Duration(num, span) = parser.tokens.expect_duration() else {
                 unreachable!("parser.tokens.peek_duration() returned true but expect_duration() did not return a float");
             };
-            return parser.exprs.add(Expr::Duration(num, span));
+            return parser.exprs.lock_mut().add(Expr::Duration(num, span));
         }
         if parser.tokens.peek_str() {
             let Token::String(value, span) = parser.tokens.expect_str() else {
                 unreachable!("parser.tokens.peek_str() returned true but expect_str() did not return a string");
             };
-            return parser.exprs.add(Expr::String(
+            return parser.exprs.lock_mut().add(Expr::String(
                 value.into_iter().map(|c| match c {
                     StrLitComp::String(s) => StringComp::String(s),
                     StrLitComp::Component(mut c) => {
@@ -111,10 +111,10 @@ impl Expr {
         }
         if parser.tokens.peek_ident() {
             let path = Expr::parse_ident_path(parser);
-            return parser.exprs.add(Expr::Ident(path));
+            return parser.exprs.lock_mut().add(Expr::Ident(path));
         }
 
         let span = parser.tokens.expected("expression");
-        parser.exprs.add(Expr::Ident(parser.tokens.names().missing_path(span)))
+        parser.exprs.lock_mut().add(Expr::Ident(parser.tokens.names.lock_mut().missing_path(span)))
     }
 }

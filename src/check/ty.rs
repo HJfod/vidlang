@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
-use crate::{ast::expr::Expr, pools::{codebase::{Codebase, ModId}, exprs::ExprId, names::{NameId, Names}}};
+use crate::{ast::expr::Expr, pools::{codebase::ModId, exprs::ExprId, items::ItemId, names::NameId}};
 
+#[derive(Debug)]
 pub enum Ty {
     Bool,
     Int,
     Float,
     Duration,
     String,
-    Tuple(Vec<Ty>),
     Function {
         params: Vec<(Ty, bool)>,
         return_ty: Box<Ty>,
@@ -26,48 +26,30 @@ pub enum Ty {
     NonExhaustive(Expr),
 }
 
+#[derive(Debug)]
 pub enum ConstValue {
     Bool(bool),
     Int(i64),
     Float(f64),
     Duration(f64),
     String(String),
-    Tuple(Vec<ConstValue>),
 }
 
+#[derive(Debug)]
 pub enum Item {
     Constant(NameId, ExprId, ConstValue),
     Module {
         name: NameId,
         definition: ModId,
-        items: HashMap<NameId, Item>,
+        items: HashMap<NameId, ItemId>,
     },
 }
 
-pub struct Checker {
-    package_roots: HashMap<String, Item>,
-}
-
-impl Checker {
-    pub fn new(codebase: &Codebase, names: Names) -> Self {
-        Self {
-            package_roots: codebase.packages()
-                .map(|p| (p.0.to_owned(), Self::make_submodule(codebase, names.clone(), p.0, p.1)))
-                .collect()
-        }
-    }
-    fn make_submodule(codebase: &Codebase, names: Names, name: &str, id: ModId) -> Item {
-        let mut items = HashMap::new();
-        for (name, sub) in codebase.get_submodules_for(id) {
-            items.insert(
-                names.add(name),
-                Self::make_submodule(codebase, names.clone(), name, sub)
-            );
-        }
-        Item::Module {
-            name: names.add(name),
-            definition: id,
-            items,
+impl Item {
+    pub fn get_subitems(&self) -> Vec<ItemId> {
+        match self {
+            Item::Constant(..) => vec![],
+            Item::Module { items, .. } => items.values().copied().collect(),
         }
     }
 }

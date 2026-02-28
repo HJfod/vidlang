@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ffi::OsStr, fs::read_to_string, io::Error, path::{Path, PathBuf}, range::Range, str::Chars};
 
 use crate::{
-    ast::expr::{Ast, ParseArgs, Parser}, pools::{exprs::Exprs, messages::Messages, names::Names}, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}, utils::lookahead_iter::Looakhead
+    ast::expr::{Ast, ParseArgs, Parser}, pools::{PoolRef, exprs::Exprs, messages::Messages, names::Names}, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}, utils::lookahead_iter::Looakhead
 };
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -195,7 +195,7 @@ impl Codebase {
     pub fn create_src_iter(&self, id: ModId) -> Option<SrcIterator<'_>> {
         Some(SrcIterator::new(id, self.get(id).data.as_ref()?.chars()))
     }
-    pub fn tokenize(&self, id: ModId, names: Names, messages: Messages) -> Option<Tokens> {
+    pub fn tokenize(&self, id: ModId, names: PoolRef<Names>, messages: PoolRef<Messages>) -> Option<Tokens> {
         Some(Tokens::new(
             Tokenizer::new(&mut self.create_src_iter(id)?, names.clone(), messages.clone()).collect(),
             "eof",
@@ -204,16 +204,16 @@ impl Codebase {
             messages
         ))
     }
-    pub fn parse_one(&mut self, id: ModId, names: Names, messages: Messages, exprs: Exprs, args: ParseArgs) -> Option<&Ast> {
+    pub fn parse_one(&mut self, id: ModId, names: PoolRef<Names>, messages: PoolRef<Messages>, exprs: PoolRef<Exprs>, args: ParseArgs) -> Option<&Ast> {
         // Having to re-get this is silly but I ran into borrow checker issues
         if self.get(id).parsed_ast.is_some() {
             return self.get(id).parsed_ast.as_ref();
         }
-        let mut tokens = self.tokenize(id, names, messages.clone())?;
+        let mut tokens = self.tokenize(id, names.clone(), messages.clone())?;
         self.get_mut(id).parsed_ast = Some(Ast::parse(&mut Parser::new(&mut tokens, exprs, args)));
         self.get(id).parsed_ast.as_ref()
     }
-    pub fn parse_all(&mut self, names: Names, messages: Messages, exprs: Exprs, args: ParseArgs) {
+    pub fn parse_all(&mut self, names: PoolRef<Names>, messages: PoolRef<Messages>, exprs: PoolRef<Exprs>, args: ParseArgs) {
         for id in self.pool.iter().enumerate().map(|m| ModId(m.0)).collect::<Vec<_>>() {
             self.parse_one(id, names.clone(), messages.clone(), exprs.clone(), args);
         }

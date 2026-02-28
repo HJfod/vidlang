@@ -1,6 +1,5 @@
-use std::{fmt::Display, sync::{Arc, Mutex}};
-
-use crate::pools::codebase::{Codebase, Span};
+use std::fmt::Display;
+use crate::pools::{PoolRef, codebase::{Codebase, Span}};
 
 #[derive(Debug)]
 pub enum NoteLevel {
@@ -79,26 +78,24 @@ impl Message {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Messages {
-    messages: Arc<Mutex<Vec<Message>>>,
+    messages: Vec<Message>,
 }
 
 impl Messages {
-    pub fn new() -> Self {
-        Self {
-            messages: Arc::new(Mutex::new(Vec::new()))
-        }
+    pub fn new() -> PoolRef<Self> {
+        PoolRef::new(Self {
+            messages: Vec::new()
+        })
     }
-    pub fn add(&self, msg: Message) {
-        let mut m = self.messages.lock().unwrap();
-        m.push(msg);
+    pub fn add(&mut self, msg: Message) {
+        self.messages.push(msg);
     }
     pub fn counts(&self) -> (usize, usize) {
-        let m = self.messages.lock().unwrap();
         let mut errors = 0;
         let mut warnings = 0;
-        for msg in m.iter() {
+        for msg in &self.messages {
             match msg.level {
                 MessageLevel::Error => errors += 1,
                 MessageLevel::Warning => warnings += 1,
@@ -107,11 +104,10 @@ impl Messages {
         (errors, warnings)
     }
     pub fn count_total(&self) -> usize {
-        self.messages.lock().unwrap().len()
+        self.messages.len()
     }
     pub fn release<F: FnMut(&str)>(&self, codebase: &Codebase, mut releaser: F) {
-        let m = self.messages.lock().unwrap();
-        for msg in m.iter() {
+        for msg in &self.messages {
             let mut formatted = String::new();
             if let Some(span) = msg.span {
                 formatted.push_str(&format!(

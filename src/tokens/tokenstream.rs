@@ -1,10 +1,7 @@
 use std::fmt::Display;
 
 use crate::{
-    ast::expr::Ident,
-    pools::{codebase::Span, messages::{Message, Messages}, names::Names},
-    utils::lookahead_iter::Looakhead,
-    tokens::token::{BracketType, Symbol, Token}
+    ast::expr::Ident, pools::{PoolRef, codebase::Span, messages::{Message, Messages}, names::Names}, tokens::token::{BracketType, Symbol, Token}, utils::lookahead_iter::Looakhead
 };
 
 // Realistically most of our file is already in one big Vec<Token> anyway because 
@@ -16,12 +13,12 @@ pub struct Tokens {
     iter: Looakhead<std::vec::IntoIter<Token>, 2>,
     last_span: Span,
     eof_name: String,
-    names: Names,
-    messages: Messages,
+    pub names: PoolRef<Names>,
+    pub messages: PoolRef<Messages>,
 }
 
 impl Tokens {
-    pub fn new<S: Display>(tks: Vec<Token>, eof_name: S, first_span: Span, names: Names, messages: Messages) -> Self {
+    pub fn new<S: Display>(tks: Vec<Token>, eof_name: S, first_span: Span, names: PoolRef<Names>, messages: PoolRef<Messages>) -> Self {
         Self {
             iter: Looakhead::new(tks.into_iter()),
             last_span: first_span,
@@ -40,7 +37,7 @@ impl Tokens {
     fn skip_attributes(&mut self) {
         while self.peek_attr() {
             let tk = self.next().unwrap();
-            self.messages.add(Message::new_error("attributes are not allowed here", tk.span()));
+            self.messages.lock_mut().add(Message::new_error("attributes are not allowed here", tk.span()));
         }
     }
 
@@ -53,7 +50,7 @@ impl Tokens {
         match self.next() {
             Some(t) if matcher(&t) => t,
             Some(bad) => {
-                self.messages.add(Message::expected(
+                self.messages.lock_mut().add(Message::expected(
                     expected.to_string(), bad.expected_name(), bad.span()
                 ));
                 bad
@@ -71,7 +68,7 @@ impl Tokens {
         ) {
             return Ident(name, span);
         }
-        Ident(self.names.missing(), self.last_span)
+        Ident(self.names.lock_mut().missing(), self.last_span)
     }
 
     pub fn peek_symbol(&mut self, symbol: Symbol) -> bool {
@@ -143,7 +140,7 @@ impl Tokens {
     pub fn expect_attr(&mut self) -> Token {
         let tk = self.next();
         if !matches!(tk, Some(Token::Attribute(..))) {
-            self.messages.add(Message::expected(
+            self.messages.lock_mut().add(Message::expected(
                 "attribute",
                 tk.as_ref().map(|t| t.expected_name()).unwrap_or(&self.eof_name),
                 tk.as_ref().map(|t| t.span()).unwrap_or(self.last_span)
@@ -159,13 +156,13 @@ impl Tokens {
             Some(invalid) => (invalid.expected_name(), invalid.span()),
             None => (self.eof_name(), self.last_span()),
         };
-        self.messages.add(Message::expected(what, name, span));
+        self.messages.lock_mut().add(Message::expected(what, name, span));
         span
     }
 
     pub fn expect_empty(&self) {
         if let Some(p) = self.peek() {
-            self.messages.add(Message::expected(&self.eof_name, p.expected_name(), p.span()));
+            self.messages.lock_mut().add(Message::expected(&self.eof_name, p.expected_name(), p.span()));
         }
     }
 
@@ -180,12 +177,6 @@ impl Tokens {
     }
     pub fn eof_name(&self) -> &str {
         &self.eof_name
-    }
-    pub fn names(&self) -> Names {
-        self.names.clone()
-    }
-    pub fn messages(&self) -> Messages {
-        self.messages.clone()
     }
 }
 
@@ -235,5 +226,5 @@ fn tokenizing() {
     tokens.expect_str();
     tokens.expect_symbol(Symbol::Semicolon);
     tokens.expect_empty();
-    assert!(messages.count_total() == 0, "{messages:?}");
+    assert!(messages.lock().count_total() == 0, "{messages:?}");
 }

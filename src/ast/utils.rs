@@ -6,12 +6,12 @@ use crate::{
 };
 
 impl Expr {
-    pub(super) fn parse_semicolon_expr_list(parser: &mut Parser<'_>, only_definitions: bool) -> Vec<ExprId> {
+    pub(super) fn parse_semicolon_expr_list(parser: &mut Parser, only_definitions: bool) -> Vec<ExprId> {
         let mut list = Vec::new();
         let parse = if only_definitions { Expr::parse_definition } else { Expr::parse };
         while parser.tokens.peek().is_some() {
             let mut expr = parse(parser);
-            let requires_semicolon = parser.exprs.exec(expr, |e| e.requires_semicolon(parser.exprs.clone()));
+            let requires_semicolon = parser.exprs.lock().get(expr).requires_semicolon(parser.exprs.clone());
 
             if requires_semicolon {
                 // For error recovery reasons, do not consume unless we 
@@ -22,7 +22,7 @@ impl Expr {
                     }
                     tk => {
                         if only_definitions || tk.is_some() {
-                            parser.tokens.messages().add(Message::expected(
+                            parser.tokens.messages.lock_mut().add(Message::expected(
                                 "semicolon",
                                 tk.map(|t| t.expected_name()).unwrap_or(parser.tokens.eof_name()),
                                 tk.map(|t| t.span()).unwrap_or(parser.tokens.last_span()),
@@ -30,8 +30,8 @@ impl Expr {
                         }
                         // Last statement is transformed into `yield x`
                         else {
-                            let span = parser.exprs.exec(expr, |e| e.span());
-                            expr = parser.exprs.add(Expr::Yield(expr, span));
+                            let span = parser.exprs.lock().get(expr).span();
+                            expr = parser.exprs.lock_mut().add(Expr::Yield(expr, span));
                         }
                     }
                 }
@@ -45,7 +45,7 @@ impl Expr {
                 found_additional_semicolons = true;
             }
             if found_additional_semicolons {
-                parser.tokens.messages().add(Message::new_error(
+                parser.tokens.messages.lock_mut().add(Message::new_error(
                     "unnecessary semicolon(s)",
                     parser.tokens.span_from(too_many_semicolons_start)
                 ));
@@ -53,7 +53,7 @@ impl Expr {
         }
         list
     }
-    pub(super) fn parse_comma(parser: &mut Parser<'_>) {
+    pub(super) fn parse_comma(parser: &mut Parser) {
         // For error recovery reasons, do not consume unless we 
         // actually got a comma
         match parser.tokens.peek() {
@@ -61,7 +61,7 @@ impl Expr {
                 parser.tokens.next();
             }
             tk => {
-                parser.tokens.messages().add(Message::expected(
+                parser.tokens.messages.lock_mut().add(Message::expected(
                     "comma",
                     tk.map(|t| t.expected_name()).unwrap_or(parser.tokens.eof_name()),
                     tk.map(|t| t.span()).unwrap_or(parser.tokens.last_span()),
@@ -69,7 +69,7 @@ impl Expr {
             }
         }
     }
-    pub(super) fn parse_comma_list<T>(parse_item: impl Fn(&mut Parser<'_>) -> T, parser: &mut Parser<'_>) -> Vec<T> {
+    pub(super) fn parse_comma_list<T>(parse_item: impl Fn(&mut Parser) -> T, parser: &mut Parser) -> Vec<T> {
         let mut items = Vec::new();
         while parser.tokens.peek().is_some() {
             items.push(parse_item(parser));

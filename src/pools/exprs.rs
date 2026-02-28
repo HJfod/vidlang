@@ -1,25 +1,21 @@
-use std::sync::{Arc, RwLock};
-
 use slotmap::{SlotMap, new_key_type};
-
-use crate::ast::expr::Expr;
+use crate::{ast::expr::Expr, pools::PoolRef};
 
 new_key_type! { pub struct ExprId; }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Exprs {
-    map: Arc<RwLock<SlotMap<ExprId, Expr>>>,
+    map: SlotMap<ExprId, Expr>,
 }
 
 impl Exprs {
-    pub fn new() -> Self {
-        Self { map: Arc::new(RwLock::new(SlotMap::with_key())) }
+    pub fn new() -> PoolRef<Self> {
+        PoolRef::new(Self { map: SlotMap::with_key() })
     }
-    pub fn add(&self, expr: Expr) -> ExprId {
-        self.map.write().unwrap().insert(expr)
+    pub fn add(&mut self, expr: Expr) -> ExprId {
+        self.map.insert(expr)
     }
-    /// Note: do NOT call `Exprs::add` here, as that'll deadlock!
-    pub fn exec<T>(&self, id: ExprId, executor: impl Fn(&Expr) -> T) -> T {
-        executor(self.map.read().unwrap().get(id).unwrap())
+    pub fn get(&self, id: ExprId) -> &Expr {
+        self.map.get(id).expect("Exprs has handed out an invalid ExprId")
     }
 }

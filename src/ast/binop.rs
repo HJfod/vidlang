@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::{
     ast::expr::{Expr, Ident, IdentPath, LogicChainType, Parser},
     pools::{exprs::ExprId, messages::Message},
@@ -5,7 +7,7 @@ use crate::{
 };
 
 impl Expr {
-    fn parse_call_arg(parser: &mut Parser<'_>) -> (Option<Ident>, ExprId) {
+    fn parse_call_arg(parser: &mut Parser) -> (Option<Ident>, ExprId) {
         if parser.tokens.peek_ident() &&
             parser.tokens.peek_n(1).is_some_and(
                 |t| matches!(t, Token::Symbol(Symbol::Colon | Symbol::Assign, _))
@@ -16,7 +18,7 @@ impl Expr {
                 unreachable!("a symbol was previously peeked but parser.tokens.next() did not return one");
             };
             if sym == Symbol::Assign {
-                parser.tokens.messages().add(Message::new_error(
+                parser.tokens.messages.lock_mut().add(Message::new_error(
                     "named function args are passed using `arg: value`, not with assignment",
                     sym_span
                 ));
@@ -28,7 +30,7 @@ impl Expr {
         }
     }
 
-    fn parse_base(parser: &mut Parser<'_>) -> ExprId {
+    fn parse_base(parser: &mut Parser) -> ExprId {
         if let Some(cf) = Expr::try_parse_control_flow(parser) {
             return cf;
         }
@@ -37,7 +39,7 @@ impl Expr {
         }
         Expr::parse_value(parser)
     }
-    fn parse_unop(parser: &mut Parser<'_>) -> ExprId {
+    fn parse_unop(parser: &mut Parser) -> ExprId {
         // Collect prefix unary operator (+, -, !)
         // Multiple operators are not allowed (since why would you ever 
         // actually write `--a`?)
@@ -46,13 +48,13 @@ impl Expr {
             |sym| matches!(sym, Symbol::Plus | Symbol::Minus | Symbol::Exclamation)
         ) {
             if op == Symbol::Plus {
-                parser.tokens.messages().add(Message::new_error(
+                parser.tokens.messages.lock_mut().add(Message::new_error(
                     "unary plus operator is not supported",
                     span
                 ));
             }
             else if unary_op.is_some() {
-                parser.tokens.messages().add(
+                parser.tokens.messages.lock_mut().add(
                     Message::new_error(
                         "only one unary operator may be used at once",
                         span
@@ -76,7 +78,7 @@ impl Expr {
                 );
             }
             else {
-                let func_name = parser.tokens.names().builtin_unop_name(op, span);
+                let func_name = parser.tokens.names.lock_mut().builtin_unop_name(op, span);
                 unary_op = Some((op, func_name));
             }
         }
@@ -91,8 +93,11 @@ impl Expr {
                 let Token::Bracketed(_, mut args_tokens, _) = parser.tokens.expect_bracketed(BracketType::Parentheses) else {
                     unreachable!("parser.tokens.peek_bracketed returned true but expect_bracketed did not return Bracketed");
                 };
-                let args = Expr::parse_comma_list(Expr::parse_call_arg, &mut parser.fork(&mut args_tokens));
-                expr = parser.exprs.add(Expr::Call {
+                let args = Expr::parse_comma_list(
+                    Expr::parse_call_arg,
+                    &mut Parser::new(&mut args_tokens, parser.exprs.clone(), parser.args)
+                );
+                expr = parser.exprs.lock_mut().add(Expr::Call {
                     target: expr,
                     args,
                     op: None,
@@ -102,7 +107,7 @@ impl Expr {
             }
             if parser.tokens.peek_and_expect_symbol(Symbol::Dot) {
                 let field_name = Expr::parse_ident_path(parser);
-                expr = parser.exprs.add(Expr::FieldAccess {
+                expr = parser.exprs.lock_mut().add(Expr::FieldAccess {
                     target: expr,
                     field: field_name,
                     span: parser.tokens.span_from(start)
@@ -116,17 +121,18 @@ impl Expr {
         // (this binds less tightly than the result of a suffix, since 
         // `-func() == -(func())`)
         if let Some((op, func_name)) = unary_op {
-            expr = parser.exprs.add(Expr::Call {
+            let call = Expr::Call {
                 args: vec![(None, expr)],
                 op: Some((op, func_name.1)),
                 span: parser.tokens.span_from(func_name.1.start()),
-                target: parser.exprs.add(Expr::Ident(func_name)),
-            })
+                target: parser.exprs.lock_mut().add(Expr::Ident(func_name)),
+            };
+            expr = parser.exprs.lock_mut().add(call)
         }
 
         expr
     }
-    fn parse_binop_power(parser: &mut Parser<'_>) -> ExprId {
+    fn parse_binop_power(parser: &mut Parser) -> ExprId {
         let start = parser.tokens.start();
         let mut lhs = Expr::parse_unop(parser);
         while let Some((op, span)) = parser.tokens.peek_and_expect_symbol_of(|sym| sym == Symbol::Power) {
@@ -136,11 +142,11 @@ impl Expr {
             // if so (since unary prefixes are ambiguous, as the mathematical 
             // parse for `-2 ** 5` would be `-(2 ** 5)`, but like, who is 
             // expecting that to happen)
-            parser.exprs.exec(lhs, |e| if let Expr::Call { args, op: Some((_, prev_span)), .. } = e {
+            if let Expr::Call { args, op: Some((_, prev_span)), .. } = parser.exprs.lock().get(lhs) {
                 // We differentiate between unary and binary operators based on 
                 // argument count :-)
                 if args.len() == 1 {
-                    parser.tokens.messages().add(
+                    parser.tokens.messages.lock_mut().add(
                         Message::new_error(
                             "unary prefix operators with power operators are ambiguous \
                             (`-a ** b` might be `-(a ** b)` or `(-a) ** b`)",
@@ -148,11 +154,11 @@ impl Expr {
                         ).with_hint("add parentheses to resolve the ambiguity", None)
                     );
                 }
-            } );
+            }
 
-            let func_name = parser.tokens.names().builtin_binop_name(op, span);
-            lhs = parser.exprs.add(Expr::Call {
-                target: parser.exprs.add(Expr::Ident(func_name)),
+            let func_name = parser.tokens.names.lock_mut().builtin_binop_name(op, span);
+            lhs = parser.exprs.lock_mut().add(Expr::Call {
+                target: parser.exprs.lock_mut().add(Expr::Ident(func_name)),
                 args: vec![(None, lhs), (None, rhs)],
                 op: Some((op, span)),
                 span: parser.tokens.span_from(start)
@@ -160,31 +166,32 @@ impl Expr {
         }
         lhs
     }
-    fn parse_binop_mul(parser: &mut Parser<'_>) -> ExprId {
+    fn parse_binop_mul(parser: &mut Parser) -> ExprId {
         let start = parser.tokens.start();
         let mut lhs = Expr::parse_binop_power(parser);
         let is_sum_sym = |sym| matches!(sym, Symbol::Mul | Symbol::Div | Symbol::Mod);
         while let Some((op, span)) = parser.tokens.peek_and_expect_symbol_of(is_sum_sym) {
             let rhs = Expr::parse_binop_power(parser);
-            let func_name = parser.tokens.names().builtin_binop_name(op, span);
-            lhs = parser.exprs.add(Expr::Call {
-                target: parser.exprs.add(Expr::Ident(func_name)),
+            let func_name = parser.tokens.names.lock_mut().builtin_binop_name(op, span);
+            let call = Expr::Call {
+                target: parser.exprs.lock_mut().add(Expr::Ident(func_name)),
                 args: vec![(None, lhs), (None, rhs)],
                 op: Some((op, span)),
                 span: parser.tokens.span_from(start)
-            })
+            };
+            lhs = parser.exprs.lock_mut().add(call)
         }
         lhs
     }
-    fn parse_binop_sum(parser: &mut Parser<'_>) -> ExprId {
+    fn parse_binop_sum(parser: &mut Parser) -> ExprId {
         let start = parser.tokens.start();
         let mut lhs = Expr::parse_binop_mul(parser);
         let is_sum_sym = |sym| matches!(sym, Symbol::Plus | Symbol::Minus);
         while let Some((op, span)) = parser.tokens.peek_and_expect_symbol_of(is_sum_sym) {
             let rhs = Expr::parse_binop_mul(parser);
-            let func_name = parser.tokens.names().builtin_binop_name(op, span);
-            lhs = parser.exprs.add(Expr::Call {
-                target: parser.exprs.add(Expr::Ident(func_name)),
+            let func_name = parser.tokens.names.lock_mut().builtin_binop_name(op, span);
+            lhs = parser.exprs.lock_mut().add(Expr::Call {
+                target: parser.exprs.lock_mut().add(Expr::Ident(func_name)),
                 args: vec![(None, lhs), (None, rhs)],
                 op: Some((op, span)),
                 span: parser.tokens.span_from(start)
@@ -192,7 +199,7 @@ impl Expr {
         }
         lhs
     }
-    fn parse_binop_eq(parser: &mut Parser<'_>) -> ExprId {
+    fn parse_binop_eq(parser: &mut Parser) -> ExprId {
         let start = parser.tokens.start();
         let mut lhs = Expr::parse_binop_sum(parser);
         let is_eq_sym = |sym| matches!(sym, Symbol::Eq | Symbol::Neq | Symbol::Less | Symbol::Leq | Symbol::Meq | Symbol::More);
@@ -206,16 +213,16 @@ impl Expr {
             // hard-to-spot unintentional bug)
             // todo: allow (a == b == c) because that makes sense (and maybe (a < b < c))?
             if found_one {
-                parser.tokens.messages().add(
+                parser.tokens.messages.lock_mut().add(
                     Message::new_error("only one comparison operator may be used at once", span)
                         .with_hint("surround this comparison in parentheses", None)
                 );
             }
             else {
                 found_one = true;
-                let func_name = parser.tokens.names().builtin_binop_name(op, span);
-                lhs = parser.exprs.add(Expr::Call {
-                    target: parser.exprs.add(Expr::Ident(func_name)),
+                let func_name = parser.tokens.names.lock_mut().builtin_binop_name(op, span);
+                lhs = parser.exprs.lock_mut().add(Expr::Call {
+                    target: parser.exprs.lock_mut().add(Expr::Ident(func_name)),
                     args: vec![(None, lhs), (None, rhs)],
                     op: Some((op, span)),
                     span: parser.tokens.span_from(start)
@@ -225,7 +232,7 @@ impl Expr {
         lhs
     }
     /// Second lowest precedence binary operators: logic chains (`a and b and c` etc.)
-    fn parse_logic_chain(parser: &mut Parser<'_>) -> ExprId {
+    fn parse_logic_chain(parser: &mut Parser) -> ExprId {
         let start = parser.tokens.start();
         let first = Expr::parse_binop_eq(parser);
 
@@ -238,13 +245,13 @@ impl Expr {
             while let Some((next, span)) = parser.tokens.peek_and_expect_symbol_of(is_logic_chain_sym) {
                 values.push(Expr::parse_binop_eq(parser));
                 if next != orig_sym {
-                    parser.tokens.messages().add(
+                    parser.tokens.messages.lock_mut().add(
                         Message::new_error("mixing \"and\" and \"or\" expressions is ambiguous", span)
                             .with_hint("add parentheses to resolve the ambiguity", None)
                     );
                 }
             }
-            return parser.exprs.add(Self::LogicChain {
+            return parser.exprs.lock_mut().add(Self::LogicChain {
                 values,
                 ty: if orig_sym == Symbol::And {
                     LogicChainType::And
@@ -257,7 +264,7 @@ impl Expr {
         }
         first
     }
-    fn parse_binop_assign(parser: &mut Parser<'_>) -> ExprId {
+    fn parse_binop_assign(parser: &mut Parser) -> ExprId {
         let start = parser.tokens.start();
         let mut lhs = Expr::parse_logic_chain(parser);
         let is_ass_sym = |sym| matches!(sym, Symbol::Assign | Symbol::AddAssign | Symbol::SubAssign);
@@ -267,7 +274,7 @@ impl Expr {
             let rhs = Expr::parse_logic_chain(parser);
 
             if found_one {
-                parser.tokens.messages().add(
+                parser.tokens.messages.lock_mut().add(
                     Message::new_error("only one assignment operator may be used at once", span)
                         .with_hint(
                             "surround this assignment in parentheses, or \
@@ -278,7 +285,7 @@ impl Expr {
             }
             else {
                 found_one = true;
-                lhs = parser.exprs.add(Expr::Assign {
+                lhs = parser.exprs.lock_mut().add(Expr::Assign {
                     target: lhs,
                     value: rhs,
                     op: (op, span),
@@ -288,7 +295,7 @@ impl Expr {
         }
         lhs
     }
-    pub(super) fn parse_binop(parser: &mut Parser<'_>) -> ExprId {
+    pub(super) fn parse_binop(parser: &mut Parser) -> ExprId {
         Self::parse_binop_assign(parser)
     }
 }
@@ -310,8 +317,9 @@ fn ambiguous_exprs() {
             allow_non_definitions_at_root: true,
         });
         assert_eq!(
-            messages.counts().0, 1,
-            "`{data}` didn't result in one error:\n{}", messages.to_test_string(&codebase)
+            messages.lock().counts().0, 1,
+            "`{data}` didn't result in one error:\n{}",
+            messages.lock().to_test_string(&codebase)
         );
     };
 
@@ -340,40 +348,40 @@ fn binop() {
     });
 
     assert_eq!(
-        messages.count_total(), 0,
-        "messages was not empty:\n{}", messages.to_test_string(&codebase)
+        messages.lock().count_total(), 0,
+        "messages was not empty:\n{}", messages.lock().to_test_string(&codebase)
     );
 
     let ast = codebase.get_ast_for(id).unwrap().exprs();
     assert_eq!(ast.len(), 1);
 
-    let make_shit_up = |op: Symbol, lhs: ExprId, rhs: ExprId| exprs.add(Expr::Call {
-        target: exprs.add(Expr::Ident(names.builtin_binop_name(op, Span::zero(id)))),
+    let make_shit_up = |op: Symbol, lhs: ExprId, rhs: ExprId| exprs.lock_mut().add(Expr::Call {
+        target: exprs.lock_mut().add(Expr::Ident(names.lock_mut().builtin_binop_name(op, Span::zero(id)))),
         args: vec![(None, lhs), (None, rhs)],
         op: Some((op, Span::zero(id))),
         span: Span::zero(id)
     });
 
     ast.debug_ast_assert_eq(
-        &[exprs.add(Expr::Yield(
+        &[exprs.lock_mut().add(Expr::Yield(
             make_shit_up(Symbol::Plus, 
                 make_shit_up(Symbol::Minus,
                     make_shit_up(Symbol::Plus, 
-                        exprs.add(Expr::Int(1, Span::zero(id))),
+                        exprs.lock_mut().add(Expr::Int(1, Span::zero(id))),
                         make_shit_up(Symbol::Mul,
-                            exprs.add(Expr::Int(2, Span::zero(id))),
+                            exprs.lock_mut().add(Expr::Int(2, Span::zero(id))),
                             make_shit_up(Symbol::Power,
-                                exprs.add(Expr::Int(3, Span::zero(id))),
-                                exprs.add(Expr::Int(4, Span::zero(id))),
+                                exprs.lock_mut().add(Expr::Int(3, Span::zero(id))),
+                                exprs.lock_mut().add(Expr::Int(4, Span::zero(id))),
                             ),
                         ),
                     ),
-                    exprs.add(Expr::Int(5, Span::zero(id))),
+                    exprs.lock_mut().add(Expr::Int(5, Span::zero(id))),
                 ),
-                exprs.add(Expr::Int(6, Span::zero(id))),
+                exprs.lock_mut().add(Expr::Int(6, Span::zero(id))),
             ),
             Span::zero(id)
         ))],
-        exprs.clone()
+        exprs.lock().deref()
     );
 }

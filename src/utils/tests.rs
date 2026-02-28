@@ -3,44 +3,44 @@
 
 use crate::{
     ast::expr::{Expr, FunctionParam, FunctionParamKind, Ident, IdentPath, LogicChainType, StringComp, Visibility},
-    pools::{codebase::Span, exprs::{ExprId, Exprs}, names::NameId}, tokens::token::Symbol};
+    pools::{PoolRef, codebase::Span, exprs::{ExprId, Exprs}, names::NameId}, tokens::token::Symbol};
 
 pub trait DebugAstEq {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs);
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: &Exprs);
 }
 
 // It would be very neat if we could auto-derive impl for all PartialEq but 
 // unfortunately ExprId is PartialEq and no specialization </3
 
 impl DebugAstEq for bool {
-    fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, _exprs: &Exprs) {
         assert_eq!(*self, *other)
     }
 }
 impl DebugAstEq for u64 {
-    fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, _exprs: &Exprs) {
         assert_eq!(*self, *other)
     }
 }
 impl DebugAstEq for f64 {
-    fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, _exprs: &Exprs) {
         assert_eq!(*self, *other)
     }
 }
 impl DebugAstEq for String {
-    fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, _exprs: &Exprs) {
         assert_eq!(*self, *other)
     }
 }
 
 impl<A: DebugAstEq, B: DebugAstEq> DebugAstEq for (A, B) {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: &Exprs) {
        self.0.debug_ast_assert_eq(&other.0, exprs.clone());
        self.1.debug_ast_assert_eq(&other.1, exprs.clone());
     }
 }
 impl<T: DebugAstEq> DebugAstEq for Option<T> {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: &Exprs) {
         assert_eq!(self.is_some(), other.is_some());
         if let Some(a) = self && let Some(b) = other {
             a.debug_ast_assert_eq(b, exprs.clone());
@@ -48,7 +48,7 @@ impl<T: DebugAstEq> DebugAstEq for Option<T> {
     }
 }
 impl<T: DebugAstEq> DebugAstEq for [T] {
-    fn debug_ast_assert_eq(&self, other: &Self,exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self,exprs: &Exprs) {
         assert_eq!(self.len(), other.len());
         for (a, b) in self.iter().zip(other.iter()) {
             a.debug_ast_assert_eq(b, exprs.clone());
@@ -56,7 +56,7 @@ impl<T: DebugAstEq> DebugAstEq for [T] {
     }
 }
 impl<T: DebugAstEq> DebugAstEq for Vec<T> {
-    fn debug_ast_assert_eq(&self, other: &Self,exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self,exprs: &Exprs) {
         assert_eq!(self.len(), other.len());
         for (a, b) in self.iter().zip(other.iter()) {
             a.debug_ast_assert_eq(b, exprs.clone());
@@ -65,52 +65,48 @@ impl<T: DebugAstEq> DebugAstEq for Vec<T> {
 }
 
 impl DebugAstEq for Span {
-    fn debug_ast_assert_eq(&self, _other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, _other: &Self, _exprs: &Exprs) {
         // We don't care if spans are equal or not
     }
 }
 impl DebugAstEq for Symbol {
-    fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, _exprs: &Exprs) {
         assert_eq!(self, other)
     }
 }
 impl DebugAstEq for NameId {
-    fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, _exprs: &Exprs) {
         assert_eq!(self, other);
     }
 }
 impl DebugAstEq for ExprId {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
-        exprs.exec(*self, |a| {
-            exprs.exec(*other, |b| {
-                a.debug_ast_assert_eq(b, exprs.clone());
-            });
-        });
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: &Exprs) {
+        exprs.get(*self).debug_ast_assert_eq(exprs.get(*other), exprs);
     }
 }
 
 impl DebugAstEq for Ident {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: &Exprs) {
         self.0.debug_ast_assert_eq(&other.0, exprs);
     }
 }
 impl DebugAstEq for IdentPath {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: &Exprs) {
         self.0.debug_ast_assert_eq(&other.0, exprs);
     }
 }
 impl DebugAstEq for Visibility {
-    fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, _exprs: &Exprs) {
         assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
     }
 }
 impl DebugAstEq for FunctionParamKind {
-    fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, _exprs: &Exprs) {
         assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
     }
 }
 impl DebugAstEq for FunctionParam {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: &Exprs) {
         self.name.debug_ast_assert_eq(&other.name, exprs.clone());
         self.kind.debug_ast_assert_eq(&other.kind, exprs.clone());
         self.ty.debug_ast_assert_eq(&other.ty, exprs.clone());
@@ -118,12 +114,12 @@ impl DebugAstEq for FunctionParam {
     }
 }
 impl DebugAstEq for LogicChainType {
-    fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, _exprs: &Exprs) {
         assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
     }
 }
 impl DebugAstEq for StringComp {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: &Exprs) {
         match (self, other) {
             (StringComp::String(a), StringComp::String(b)) => a.debug_ast_assert_eq(b, exprs),
             (StringComp::Expr(a), StringComp::Expr(b)) => a.debug_ast_assert_eq(b, exprs),
@@ -134,7 +130,7 @@ impl DebugAstEq for StringComp {
 
 // This really should be derived but I don't feel like writing proc macros again
 impl DebugAstEq for Expr {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: &Exprs) {
         assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
         match (self, other) {
             (Expr::Bool(a, _), Expr::Bool(b, _)) => a.debug_ast_assert_eq(b, exprs),

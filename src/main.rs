@@ -31,7 +31,7 @@ fn main() {
     let exprs = Exprs::new();
     codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs::default());
 
-    messages.release(&codebase, |msg| println!("{}", msg));
-    let (errors, warnings) = messages.counts();
+    messages.lock().release(&codebase, |msg| println!("{}", msg));
+    let (errors, warnings) = messages.lock().counts();
     println!("Finished with {errors} errors and {warnings} warnings");
 }
