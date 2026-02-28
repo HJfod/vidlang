@@ -11,8 +11,7 @@ use crate::{
 pub struct ModId(usize);
 
 enum ModuleSrc {
-    File(PathBuf, String),
-    Dir(PathBuf),
+    FileOrDir(PathBuf, Option<String>),
     Memory {
         name: String,
         data: String,
@@ -27,13 +26,8 @@ pub struct Module {
     ast: Option<Ast>,
 }
 
-fn module_name(is_dir: bool, path: &Path) -> String {
-    if is_dir {
-        path.file_name().unwrap_or(path.as_os_str()).display().to_string()
-    }
-    else {
-        path.file_stem().unwrap_or(path.as_os_str()).display().to_string()
-    }
+fn module_name(path: &Path) -> String {
+    path.file_stem().unwrap_or(path.as_os_str()).display().to_string()
 }
 
 impl Module {
@@ -42,22 +36,19 @@ impl Module {
     }
     pub fn name(&self) -> String {
         match &self.src {
-            ModuleSrc::File(p, _) => module_name(false, p),
-            ModuleSrc::Dir(p) => module_name(true, p),
+            ModuleSrc::FileOrDir(p, _) => module_name(p),
             ModuleSrc::Memory { name, data: _ } => name.clone(),
         }
     }
     pub fn data(&self) -> Option<&str> {
         match &self.src {
-            ModuleSrc::File(_, data) => Some(data),
-            ModuleSrc::Dir(_) => None,
+            ModuleSrc::FileOrDir(_, data) => data.as_deref(),
             ModuleSrc::Memory { name: _, data } => Some(data),
         }
     }
     pub fn path(&self) -> Option<&Path> {
         match &self.src {
-            ModuleSrc::File(p, _) => Some(p),
-            ModuleSrc::Dir(p) => Some(p),
+            ModuleSrc::FileOrDir(p, _) => Some(p),
             ModuleSrc::Memory { name: _, data: _ } => None,
         }
     }
@@ -77,8 +68,8 @@ impl Module {
         ))
     }
     pub fn parse(&mut self, names: Names, messages: Messages, exprs: Exprs, args: ParseArgs) -> Option<&Ast> {
-        if self.ast.is_some() {
-            return self.ast.as_ref();
+        if let Some(ref ast) = self.ast {
+            return Some(ast);
         }
         let mut tokens = self.tokenize(names, messages.clone())?;
         self.ast = Some(Ast::parse(&mut tokens, exprs.clone(), args));
@@ -181,22 +172,28 @@ impl Codebase {
         ret.add_memory(None, name, data)?;
         Ok(ret)
     }
-
-    fn add_mod(
+    
+    fn get_submodule_by_name(&self, parent: ModId, mod_name: &str) -> Option<ModId> {
+        for sub in &self.fetch(parent).submodules {
+            if self.fetch(*sub).name() == mod_name {
+                return Some(*sub);
+            }
+        }
+        None
+    }
+    fn add_new_mod(
         &mut self,
         parent: Option<ModId>,
-        check_name: impl FnOnce() -> String,
-        create_mod_if_ok: impl FnOnce(ModId) -> Result<Module, CodebaseCreateError>
+        mod_name: String,
+        create_mod: impl FnOnce(ModId) -> Module
     ) -> Result<ModId, CodebaseCreateError> {
         // Check that the name isn't going to conflict with existing paths
-        if let Some(pid) = parent {
-            self.check_submodule_name(pid, check_name())?;
+        if let Some(pid) = parent && let Some(exist) = self.get_submodule_by_name(pid, &mod_name) {
+            Err(CodebaseCreateError::DuplicateNamedModule(self.get_full_mod_name(exist)))?;
         }
 
-        // todo: if there's both a directory named main and a file named main.vid then just like. add the modules as submodules to the file
-
         let id = ModId(self.modules.len());
-        self.modules.push(create_mod_if_ok(id)?);
+        self.modules.push(create_mod(id));
         
         // Add as submodule if this is one
         if let Some(pid) = parent {
@@ -205,23 +202,44 @@ impl Codebase {
         }
         Ok(id)
     }
-    fn add_file(&mut self, parent: Option<ModId>, path: &Path) -> Result<ModId, CodebaseCreateError> {
-        // Check if this source file path has already been added
-        if let Some((id, _)) = self.modules.iter().enumerate().find(|m| m.1.path() == Some(path)) {
-            return Ok(ModId(id));
+    fn add_file_or_dir(&mut self, parent: Option<ModId>, path: &Path) -> Result<ModId, CodebaseCreateError> {
+        let mod_name = module_name(path);
+
+        // If this file submodule exists already, then keep that, otherwise 
+        let exist = parent.and_then(|pid| self.get_submodule_by_name(pid, &mod_name));
+        if exist.is_none() {
+            self.add_new_mod(
+                parent, mod_name,
+                |id| Module::new(id, ModuleSrc::FileOrDir(path.to_path_buf(), None))
+            );
         }
-        // Otherwise add new module
-        self.add_mod(
-            parent,
-            || module_name(false, path),
-            |id| Ok(Module::new(
-                id,
-                ModuleSrc::File(path.to_path_buf(), match read_to_string(path) {
-                    Ok(d) => d,
-                    Err(e) => Err(CodebaseCreateError::UnableToReadFile(path.to_path_buf(), e.to_string()))?
-                })
-            ))
-        )
+
+        Ok()
+    }
+    fn add_file(&mut self, parent: Option<ModId>, path: &Path) -> Result<ModId, CodebaseCreateError> {
+        // Add new file module
+        let id = self.add_file_mod(parent, path)?;
+        // Update data of new file module
+        match &mut self.fetch_mut(id).src {
+            ModuleSrc::FileOrDir(_, data) => {
+                if data.is_none() {
+                    *data = read_file_data()?;
+                }
+            }
+            _ => unreachable!("find_file_mod returned a non-file module")
+        }
+        let read_file_data = || -> Result<Option<String>, CodebaseCreateError> {
+            Ok(match read_to_string(path) {
+                Ok(d) => Some(d),
+                Err(e) => Err(CodebaseCreateError::UnableToReadFile(
+                    path.to_path_buf(),
+                    e.to_string()
+                ))?
+            })
+        };
+        if let Some(id) = self.find_file_mod(path) {
+            return Ok(id);
+        }
     }
     fn add_memory(&mut self, parent: Option<ModId>, name: &str, data: &str) -> Result<ModId, CodebaseCreateError> {
         // In-memory modules are always unique, so no need to check if the 
@@ -233,17 +251,17 @@ impl Codebase {
         )
     }
     fn add_dir(&mut self, parent: Option<ModId>, dir: &Path) -> Result<ModId, CodebaseCreateError> {
-        // Check if this directory has already been added
-        if let Some((id, _)) = self.modules.iter().enumerate().find(|m| m.1.path() == Some(dir)) {
-            return Ok(ModId(id));
+        // If this is an existing file mod, use that, otherwise create a new one
+        let dir_id = if let Some(exist) = self.find_file_mod(dir) {
+            exist
         }
-
-        // Otherwise create new dir module
-        let dir_id = self.add_mod(
-            parent,
-            || module_name(true, dir),
-            |id| Ok(Module::new(id, ModuleSrc::Dir(dir.to_path_buf())))
-        )?;
+        else {
+            self.add_mod(
+                parent,
+                || module_name(dir),
+                |id| Ok(Module::new(id, ModuleSrc::FileOrDir(dir.to_path_buf(), None)))
+            )?
+        };
 
         // Find all source files in this directory
         match fs::read_dir(dir) {
@@ -266,14 +284,7 @@ impl Codebase {
 
         Ok(dir_id)
     }
-    fn check_submodule_name(&self, to: ModId, to_add_name: String) -> Result<(), CodebaseCreateError> {
-        for sub in &self.fetch(to).submodules {
-            if self.fetch(*sub).name() == to_add_name {
-                Err(CodebaseCreateError::DuplicateNamedModule(self.get_full_mod_name(*sub)))?;
-            }
-        }
-        Ok(())
-    }
+
     pub fn root(&self) -> ModId {
         ModId(0)
     }
@@ -328,15 +339,6 @@ impl Span {
     }
     pub fn extend_from(self, start: usize) -> Span {
         Span(self.0, (start..self.1.end).into())
-    }
-}
-
-// For tests, Span must be PartialEq (to check that asts match) but it should 
-// just always resolve to true since we don't care
-#[cfg(test)]
-impl PartialEq for Span {
-    fn eq(&self, _other: &Self) -> bool {
-        true
     }
 }
 
