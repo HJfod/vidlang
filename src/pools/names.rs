@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use crate::{ast::expr::{Ident, IdentPath}, pools::codebase::Span, tokens::token::Symbol};
 use string_interner::{self, StringInterner, backend::StringBackend};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NameId(usize);
 
 impl string_interner::Symbol for NameId {

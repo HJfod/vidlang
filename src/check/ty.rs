@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ast::expr::Expr, pools::{codebase::{Codebase, ModId}, exprs::ExprId, names::NameId}};
+use crate::{ast::expr::Expr, pools::{codebase::{Codebase, ModId}, exprs::ExprId, names::{NameId, Names}}};
 
 pub enum Ty {
     Bool,
@@ -49,7 +49,21 @@ pub struct Checker {
 }
 
 impl Checker {
-    pub fn new(codebase: &Codebase) -> Self {
-        todo!()
+    pub fn new(codebase: &Codebase, names: Names) -> Self {
+        Self { root_module: Self::make_submodule(codebase, names, codebase.root()) }
+    }
+    fn make_submodule(codebase: &Codebase, names: Names, id: ModId) -> Item {
+        let mut items = HashMap::new();
+        for sub in codebase.submodules(id) {
+            items.insert(
+                names.add(&codebase.fetch(sub).name()), 
+                Self::make_submodule(codebase, names.clone(), sub)
+            );
+        }
+        Item::Module {
+            name: names.add(&codebase.fetch(id).name()),
+            definition: id,
+            items,
+        }
     }
 }

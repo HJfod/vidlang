@@ -25,6 +25,7 @@ fn main() {
             CodebaseCreateError::CantFindRoot => panic!("unable to find {}/main.vid!", dir.display()),
             CodebaseCreateError::UnableToReadFile(p, e) => panic!("unable to read file {}: {e}", p.display()),
             CodebaseCreateError::UnableToReadDir(p, e) => panic!("unable to read directory {}: {e}", p.display()),
+            CodebaseCreateError::DuplicateNamedModule(e) => panic!("multiple modules with the same name found: {e}"),
         }
     };
 

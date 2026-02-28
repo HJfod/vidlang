@@ -20,20 +20,30 @@ enum ModuleSrc {
 }
 
 pub struct Module {
+    parent: Option<ModId>,
     id: ModId,
     src: ModuleSrc,
     submodules: Vec<ModId>,
     ast: Option<Ast>,
 }
 
+fn module_name(is_dir: bool, path: &Path) -> String {
+    if is_dir {
+        path.file_name().unwrap_or(path.as_os_str()).display().to_string()
+    }
+    else {
+        path.file_stem().unwrap_or(path.as_os_str()).display().to_string()
+    }
+}
+
 impl Module {
-    fn new(id: ModId, submodules: Vec<ModId>, src: ModuleSrc) -> Self {
-        Self { id, submodules, src, ast: None }
+    fn new(id: ModId, src: ModuleSrc) -> Self {
+        Self { id, parent: None, submodules: Vec::new(), src, ast: None }
     }
     pub fn name(&self) -> String {
         match &self.src {
-            ModuleSrc::File(p, _) => p.file_stem().unwrap_or(p.as_os_str()).display().to_string(),
-            ModuleSrc::Dir(p) => p.file_name().unwrap_or(p.as_os_str()).display().to_string(),
+            ModuleSrc::File(p, _) => module_name(false, p),
+            ModuleSrc::Dir(p) => module_name(true, p),
             ModuleSrc::Memory { name, data: _ } => name.clone(),
         }
     }
@@ -142,69 +152,109 @@ pub enum CodebaseCreateError {
     CantFindRoot,
     UnableToReadDir(PathBuf, String),
     UnableToReadFile(PathBuf, String),
+    DuplicateNamedModule(String),
 }
 
 impl Codebase {
     pub fn from_file(path: &Path) -> Result<Self, CodebaseCreateError> {
         let mut ret = Self { modules: Default::default() };
-        ret.add_file(path)?;
+        ret.add_file(None, path)?;
         Ok(ret)
     }
     pub fn from_dir(path: &Path) -> Result<Self, CodebaseCreateError> {
         let mut ret = Self { modules: Default::default() };
+
+        // Start off by finding and adding the root source file
         let root = path.join("main.vid");
         if !root.exists() {
             return Err(CodebaseCreateError::CantFindRoot)?;
         }
-        ret.add_file(&root)?;
-        ret.add_dir(path)?;
+        let root_id = ret.add_file(None, &root)?;
+
+        // Find the rest of the source files
+        ret.add_dir(Some(root_id), path)?;
         Ok(ret)
     }
     pub fn from_memory(name: &str, data: &str) -> Self {
         let mut ret = Self { modules: Default::default() };
-        ret.add_memory(name, data);
+        ret.add_memory(None, name, data);
         ret
     }
 
-    fn add_file(&mut self, path: &Path) -> Result<ModId, CodebaseCreateError> {
+    fn add_mod(
+        &mut self,
+        parent: Option<ModId>,
+        check_name: impl FnOnce() -> String,
+        create_mod_if_ok: impl FnOnce(ModId) -> Result<Module, CodebaseCreateError>
+    ) -> Result<ModId, CodebaseCreateError> {
+        // Check that the name isn't going to conflict with existing paths
+        if let Some(pid) = parent {
+            self.check_submodule_name(pid, check_name())?;
+        }
+
+        // todo: if there's both a directory named main and a file named main.vid then just like. add the modules as submodules to the file
+
+        let id = ModId(self.modules.len());
+        self.modules.push(create_mod_if_ok(id)?);
+        
+        // Add as submodule if this is one
+        if let Some(pid) = parent {
+            self.fetch_mut(pid).submodules.push(id);
+            self.fetch_mut(id).parent = Some(pid);
+        }
+        Ok(id)
+    }
+    fn add_file(&mut self, parent: Option<ModId>, path: &Path) -> Result<ModId, CodebaseCreateError> {
+        // Check if this source file path has already been added
         if let Some((id, _)) = self.modules.iter().enumerate().find(|m| m.1.path() == Some(path)) {
             return Ok(ModId(id));
         }
-        let id = ModId(self.modules.len());
-        self.modules.push(Module::new(
-            id,
-            Vec::new(),
-            ModuleSrc::File(path.to_path_buf(), match read_to_string(path) {
-                Ok(d) => d,
-                Err(e) => Err(CodebaseCreateError::UnableToReadFile(path.to_path_buf(), e.to_string()))?
-            })
-        ));
-        Ok(id)
+        // Otherwise add new module
+        self.add_mod(
+            parent,
+            || module_name(false, path),
+            |id| Ok(Module::new(
+                id,
+                ModuleSrc::File(path.to_path_buf(), match read_to_string(path) {
+                    Ok(d) => d,
+                    Err(e) => Err(CodebaseCreateError::UnableToReadFile(path.to_path_buf(), e.to_string()))?
+                })
+            ))
+        )
     }
-    fn add_memory(&mut self, name: &str, data: &str) -> ModId {
-        // In-memory modules are always unique
-        let id = ModId(self.modules.len());
-        self.modules.push(Module::new(
-            id,
-            Vec::new(),
-            ModuleSrc::Memory { name: name.to_string(), data: data.to_string() }
-        ));
-        id
+    fn add_memory(&mut self, parent: Option<ModId>, name: &str, data: &str) -> Result<ModId, CodebaseCreateError> {
+        // In-memory modules are always unique, so no need to check if the 
+        // memory has already been added
+        self.add_mod(
+            parent,
+            || name.to_string(),
+            |id| Ok(Module::new(id, ModuleSrc::Memory { name: name.to_string(), data: data.to_string() }))
+        )
     }
-    fn add_dir(&mut self, dir: &Path) -> Result<ModId, CodebaseCreateError> {
+    fn add_dir(&mut self, parent: Option<ModId>, dir: &Path) -> Result<ModId, CodebaseCreateError> {
+        // Check if this directory has already been added
         if let Some((id, _)) = self.modules.iter().enumerate().find(|m| m.1.path() == Some(dir)) {
             return Ok(ModId(id));
         }
-        let mut submodules = Vec::new();
+
+        // Otherwise create new dir module
+        let dir_id = self.add_mod(
+            parent,
+            || module_name(true, dir),
+            |id| Ok(Module::new(id, ModuleSrc::Dir(dir.to_path_buf())))
+        )?;
+
+        // Find all source files in this directory
         match fs::read_dir(dir) {
             Ok(files) => for file in files {
                 match file {
                     Ok(f) => {
+                        // Recursively check all subdirectories aswell
                         if f.file_type().is_ok_and(|t| t.is_dir()) {
-                            submodules.push(self.add_dir(&f.path())?);
+                            self.add_dir(Some(dir_id), &f.path())?;
                         }
                         else if f.path().extension() == Some(OsStr::new("vid")) {
-                            submodules.push(self.add_file(&f.path())?);
+                            self.add_file(Some(dir_id), &f.path())?;
                         }
                     }
                     Err(e) => Err(CodebaseCreateError::UnableToReadFile(dir.to_path_buf(), e.to_string()))?
@@ -212,18 +262,36 @@ impl Codebase {
             }
             Err(e) => Err(CodebaseCreateError::UnableToReadDir(dir.to_path_buf(), e.to_string()))?
         }
-        let dir_id = ModId(self.modules.len());
-        self.modules.push(Module::new(dir_id, submodules, ModuleSrc::Dir(dir.to_path_buf())));
+
         Ok(dir_id)
     }
-
-    pub fn all_ids(&self) -> Vec<ModId> {
-        self.modules.iter().enumerate().map(|m| ModId(m.0)).collect()
+    fn check_submodule_name(&self, to: ModId, to_add_name: String) -> Result<(), CodebaseCreateError> {
+        for sub in &self.fetch(to).submodules {
+            if self.fetch(*sub).name() == to_add_name {
+                Err(CodebaseCreateError::DuplicateNamedModule(self.get_full_mod_name(*sub)))?;
+            }
+        }
+        Ok(())
     }
     pub fn root(&self) -> ModId {
         ModId(0)
     }
+    pub fn submodules(&self, id: ModId) -> Vec<ModId> {
+        self.fetch(id).submodules.clone()
+    }
 
+    pub fn get_full_mod_name(&self, id: ModId) -> String {
+        let m = self.fetch(id);
+        let mut res = m.name();
+        if let Some(p) = m.parent {
+            res = self.get_full_mod_name(p) + "::" + &res;
+        }
+        res
+    }
+
+    fn fetch_mut(&mut self, id: ModId) -> &mut Module {
+        self.modules.get_mut(id.0).expect("Codebase has apparently handed out an invalid ModId")
+    }
     pub fn fetch(&self, id: ModId) -> &Module {
         self.modules.get(id.0).expect("Codebase has apparently handed out an invalid ModId")
     }
