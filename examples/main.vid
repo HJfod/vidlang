@@ -19,31 +19,14 @@ clip epic_rectangle(width: float, height: float) {
     await rect;
 }
 
-// TODO: should this be a clip or a function?
-clip to<T>(ref target: T, value: T, const time: duration) {
-    let initial = target;
-    target = initial + (value - initial) * (frame / duration);
-    await time;
-}
-
-clip ease(target: Clip, do_in: bool = true, do_out: bool = true) {
-    let easeInMultiplier = implEaseInOut(do_in, do_out);
-    target(frame: frame * easeInMultiplier);
-}
-
 clip glow(target: Clip) {
+}
+
+function move(target: Clip, x: float, y: float, const time: duration) {
+    target.x.to(x, time);
+    target.y.to(y, time);
 }
 
 clip movie() {
     let rect = epic_rectangle(5, 5);
-}
-
-function move(target: Clip, x: float, y: float) {
-    target.x = x;
-    target.y = y;
-}
-
-// Clips and functions can have const parameters (for duration purposes)
-function tween(ref value: int, const time: duration) -> duration {
-
 }

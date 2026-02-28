@@ -1,6 +1,6 @@
 use crate::{
-    ast::expr::{Expr, Ident, LogicChainType, ParseArgs},
-    pools::{codebase::Span, exprs::{ExprId, Exprs}, messages::Message, names::NameId},
+    ast::expr::{Expr, Ident, IdentPath, LogicChainType, ParseArgs},
+    pools::{exprs::{ExprId, Exprs}, messages::Message},
     tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
@@ -41,7 +41,7 @@ impl Expr {
         // Collect prefix unary operator (+, -, !)
         // Multiple operators are not allowed (since why would you ever 
         // actually write `--a`?)
-        let mut unary_op: Option<(Symbol, NameId, Span)> = None;
+        let mut unary_op: Option<(Symbol, IdentPath)> = None;
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(
             |sym| matches!(sym, Symbol::Plus | Symbol::Minus | Symbol::Exclamation)
         ) {
@@ -62,13 +62,13 @@ impl Expr {
                     // a note saying that those aren't supported if so
                     // (increment/decrement operators were an epic mistake)
                     .with_note_if(|| {
-                        if unary_op.is_some_and(
+                        if unary_op.as_ref().is_some_and(
                             |u| u.0 == op &&
                             matches!(op, Symbol::Plus | Symbol::Minus)
                         ) {
                             return Some((
                                 "C-style increment/decrement operators like '++' are not supported",
-                                Some(span.extend_from(unary_op.unwrap().2.start()))
+                                Some(span.extend_from(unary_op.as_ref().unwrap().1.1.start()))
                             ));
                         }
                         None
@@ -76,8 +76,8 @@ impl Expr {
                 );
             }
             else {
-                let func_name = tokens.names().builtin_unop_name(op);
-                unary_op = Some((op, func_name, span));
+                let func_name = tokens.names().builtin_unop_name(op, span);
+                unary_op = Some((op, func_name));
             }
         }
 
@@ -101,7 +101,7 @@ impl Expr {
                 continue;
             }
             if tokens.peek_and_expect_symbol(Symbol::Dot) {
-                let field_name = tokens.expect_ident();
+                let field_name = Expr::parse_ident_path(tokens, exprs.clone(), args);
                 expr = exprs.add(Expr::FieldAccess {
                     target: expr,
                     field: field_name,
@@ -115,12 +115,12 @@ impl Expr {
         // Turn the previously parsed unary operator into a call expression
         // (this binds less tightly than the result of a suffix, since 
         // `-func() == -(func())`)
-        if let Some((op, func_name, span)) = unary_op {
+        if let Some((op, func_name)) = unary_op {
             expr = exprs.add(Expr::Call {
-                target: exprs.add(Expr::Ident(Ident(func_name, span))),
                 args: vec![(None, expr)],
-                op: Some((op, span)),
-                span: tokens.span_from(span.start())
+                op: Some((op, func_name.1)),
+                span: tokens.span_from(func_name.1.start()),
+                target: exprs.add(Expr::Ident(func_name)),
             })
         }
 
@@ -150,9 +150,9 @@ impl Expr {
                 }
             } );
 
-            let func_name = tokens.names().builtin_binop_name(op);
+            let func_name = tokens.names().builtin_binop_name(op, span);
             lhs = exprs.add(Expr::Call {
-                target: exprs.add(Expr::Ident(Ident(func_name, span))),
+                target: exprs.add(Expr::Ident(func_name)),
                 args: vec![(None, lhs), (None, rhs)],
                 op: Some((op, span)),
                 span: tokens.span_from(start)
@@ -166,9 +166,9 @@ impl Expr {
         let is_sum_sym = |sym| matches!(sym, Symbol::Mul | Symbol::Div | Symbol::Mod);
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(is_sum_sym) {
             let rhs = Expr::parse_binop_power(tokens, exprs.clone(), args);
-            let func_name = tokens.names().builtin_binop_name(op);
+            let func_name = tokens.names().builtin_binop_name(op, span);
             lhs = exprs.add(Expr::Call {
-                target: exprs.add(Expr::Ident(Ident(func_name, span))),
+                target: exprs.add(Expr::Ident(func_name)),
                 args: vec![(None, lhs), (None, rhs)],
                 op: Some((op, span)),
                 span: tokens.span_from(start)
@@ -182,9 +182,9 @@ impl Expr {
         let is_sum_sym = |sym| matches!(sym, Symbol::Plus | Symbol::Minus);
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(is_sum_sym) {
             let rhs = Expr::parse_binop_mul(tokens, exprs.clone(), args);
-            let func_name = tokens.names().builtin_binop_name(op);
+            let func_name = tokens.names().builtin_binop_name(op, span);
             lhs = exprs.add(Expr::Call {
-                target: exprs.add(Expr::Ident(Ident(func_name, span))),
+                target: exprs.add(Expr::Ident(func_name)),
                 args: vec![(None, lhs), (None, rhs)],
                 op: Some((op, span)),
                 span: tokens.span_from(start)
@@ -213,9 +213,9 @@ impl Expr {
             }
             else {
                 found_one = true;
-                let func_name = tokens.names().builtin_binop_name(op);
+                let func_name = tokens.names().builtin_binop_name(op, span);
                 lhs = exprs.add(Expr::Call {
-                    target: exprs.add(Expr::Ident(Ident(func_name, span))),
+                    target: exprs.add(Expr::Ident(func_name)),
                     args: vec![(None, lhs), (None, rhs)],
                     op: Some((op, span)),
                     span: tokens.span_from(start)
@@ -324,7 +324,7 @@ fn ambiguous_exprs() {
 
 #[test]
 fn binop() {
-    use crate::pools::codebase::Codebase;
+    use crate::pools::codebase::{Codebase, Span};
     use crate::pools::messages::Messages;
     use crate::pools::names::Names;
     use crate::utils::tests::DebugAstEq;
@@ -348,10 +348,7 @@ fn binop() {
     assert_eq!(ast.len(), 1);
 
     let make_shit_up = |op: Symbol, lhs: ExprId, rhs: ExprId| exprs.add(Expr::Call {
-        target: exprs.add(Expr::Ident(Ident(
-            names.builtin_binop_name(op),
-            Span::zero(id)
-        ))),
+        target: exprs.add(Expr::Ident(names.builtin_binop_name(op, Span::zero(id)))),
         args: vec![(None, lhs), (None, rhs)],
         op: Some((op, Span::zero(id))),
         span: Span::zero(id)

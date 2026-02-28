@@ -47,11 +47,12 @@ impl BracketType {
 #[strum(serialize_all="snake_case")]
 pub enum Symbol {
     // Keywords
-    Let, Const, Type, Function, Clip, Trait, Impl, Struct,
+    Let, Const, Type, Function, Clip, Trait, Impl, Struct, Module,
     Private, Public, Ref,
-    If, Then, Else, While, For, In, Loop, Await, Return, Yield,
+    Match, If, Then, Else, While, For, In, Loop, Await, Return, Yield,
     And, Or,
     True, False,
+    Macro, Codegen,
     // Operators
     #[strum(to_string="=")]
     Assign,

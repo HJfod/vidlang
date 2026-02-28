@@ -14,6 +14,9 @@ pub enum StringComp {
 pub struct Ident(pub NameId, pub Span);
 
 #[derive(Debug)]
+pub struct IdentPath(pub Vec<Ident>, pub Span);
+
+#[derive(Debug)]
 pub enum LogicChainType {
     And,
     Or,
@@ -38,12 +41,6 @@ pub struct FunctionParam {
 }
 
 #[derive(Debug)]
-pub struct GenericParam {
-    pub name: Ident,
-    pub constraint: Option<ExprId>,
-}
-
-#[derive(Debug)]
 pub enum Visibility {
     Public,
     Private,
@@ -55,7 +52,7 @@ pub enum Expr {
     Int(u64, Span),
     Float(f64, Span),
     String(Vec<StringComp>, Span),
-    Ident(Ident),
+    Ident(IdentPath),
     Tuple(Vec<ExprId>, Span),
 
     // `let a: B = 5`
@@ -69,8 +66,7 @@ pub enum Expr {
     },
     Function {
         visibility: Visibility,
-        name: Ident,
-        generics: Option<Vec<GenericParam>>,
+        name: IdentPath,
         params: Vec<FunctionParam>,
         return_ty: Option<ExprId>,
         body: ExprId,
@@ -93,7 +89,7 @@ pub enum Expr {
     // `a.b`
     FieldAccess {
         target: ExprId,
-        field: Ident,
+        field: IdentPath,
         span: Span,
     },
     // `a = 5`
@@ -124,15 +120,7 @@ pub enum Expr {
     Await(ExprId, Span),
 
     TyNamed {
-        name: Ident,
-        generics: Option<Vec<ExprId>>,
-        span: Span,
-    },
-    // `A<B>::C<D>`
-    TyAccess {
-        from: ExprId,
-        associate: Ident,
-        generics: Option<Vec<ExprId>>,
+        name: IdentPath,
         span: Span,
     },
 }
@@ -168,7 +156,6 @@ impl Expr {
             Self::Block(..) => false,
             Self::Await(value, _) => sub_requires(*value),
 
-            Self::TyAccess { .. } => true,
             Self::TyNamed { .. } => true,
         }
     }
@@ -193,7 +180,6 @@ impl Expr {
             Self::Block(_, span) => *span,
             Self::Await(_, span) => *span,
             Self::TyNamed { span, .. } => *span,
-            Self::TyAccess { span, .. } => *span,
         }
     }
 }
@@ -271,7 +257,7 @@ fn parse() {
     let id = codebase.add_memory("test_parse", r#"
         let x = 8;
         if x > 5 {
-            x += hi_guys();
+            x += lib::hi_guys();
         }
     "#);
     codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs {
@@ -297,12 +283,12 @@ fn parse() {
             }),
             exprs.add(Expr::If {
                 clause: exprs.add(Expr::Call {
-                    target: exprs.add(Expr::Ident(Ident(
-                        names.builtin_binop_name(Symbol::More),
-                        Span::zero(id)
-                    ))),
+                    target: exprs.add(Expr::Ident(names.builtin_binop_name(Symbol::More, Span::zero(id)))),
                     args: vec![
-                        (None, exprs.add(Expr::Ident(Ident(names.add("x"), Span::zero(id))))),
+                        (None, exprs.add(Expr::Ident(IdentPath(
+                            vec![Ident(names.add("x"), Span::zero(id))],
+                            Span::zero(id)
+                        )))),
                         (None, exprs.add(Expr::Int(5, Span::zero(id)))),
                     ],
                     op: Some((Symbol::More, Span::zero(id))),
@@ -310,9 +296,18 @@ fn parse() {
                 }),
                 truthy: exprs.add(Expr::Block(vec![
                     exprs.add(Expr::Assign {
-                        target: exprs.add(Expr::Ident(Ident(names.add("x"), Span::zero(id)))),
+                        target: exprs.add(Expr::Ident(IdentPath(
+                            vec![Ident(names.add("x"), Span::zero(id))],
+                            Span::zero(id)
+                        ))),
                         value: exprs.add(Expr::Call {
-                            target: exprs.add(Expr::Ident(Ident(names.add("hi_guys"), Span::zero(id)))),
+                            target: exprs.add(Expr::Ident(IdentPath(
+                                vec![
+                                    Ident(names.add("lib"), Span::zero(id)),
+                                    Ident(names.add("hi_guys"), Span::zero(id)),
+                                ],
+                                Span::zero(id)
+                            ))),
                             args: vec![],
                             op: None,
                             span: Span::zero(id)

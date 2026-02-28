@@ -1,11 +1,21 @@
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, Ident, ParseArgs, StringComp},
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, IdentPath, ParseArgs, StringComp},
     pools::{exprs::{ExprId, Exprs}, messages::Message},
     tokens::{token::{BracketType, StrLitComp, Symbol, Token},
     tokenstream::Tokens
 }};
 
 impl Expr {
+    pub(super) fn parse_ident_path(tokens: &mut Tokens, _exprs: Exprs, _args: ParseArgs) -> IdentPath {
+        // All ident paths must have at least one ident to them
+        let start = tokens.start();
+        let mut res = vec![tokens.expect_ident()];
+        while tokens.peek_and_expect_symbol(Symbol::Scope) {
+            res.push(tokens.expect_ident());
+        }
+        IdentPath(res, tokens.span_from(start))
+    }
+
     pub(super) fn parse_value(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs)
      -> ExprId
     {
@@ -98,10 +108,11 @@ impl Expr {
             ));
         }
         if tokens.peek_ident() {
-            return exprs.add(Expr::Ident(tokens.expect_ident()));
+            let path = Expr::parse_ident_path(tokens, exprs.clone(), args);
+            return exprs.add(Expr::Ident(path));
         }
 
         let span = tokens.expected("expression");
-        exprs.add(Expr::Ident(Ident(tokens.names().missing(), span)))
+        exprs.add(Expr::Ident(tokens.names().missing_path(span)))
     }
 }

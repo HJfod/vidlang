@@ -67,8 +67,7 @@ impl Expr {
         if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(
             |sym| matches!(sym, Symbol::Function | Symbol::Clip)
         ) {
-            let name = tokens.expect_ident();
-            let generics = Expr::try_parse_generic_params(tokens, exprs.clone(), args);
+            let name = Expr::parse_ident_path(tokens, exprs.clone(), args);
             let params = match tokens.expect_bracketed(BracketType::Parentheses) {
                 Token::Bracketed(_, mut params_tokens, _) => Expr::parse_comma_list(
                     Expr::parse_function_param, &mut params_tokens, exprs.clone(), args
@@ -106,7 +105,7 @@ impl Expr {
             };
             return Some(exprs.add(Expr::Function {
                 visibility,
-                name, generics, params, return_ty, body,
+                name, params, return_ty, body,
                 is_clip: sym == Symbol::Clip,
                 span: tokens.span_from(start)
             }));

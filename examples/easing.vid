@@ -1,0 +1,25 @@
+
+function ease(target: Durational, do_in: bool = true, do_out: bool = true) {
+    let easeInMultiplier = implEaseInOut(do_in, do_out);
+    target(frame: frame * easeInMultiplier);
+}
+
+function to(ref target: int, value: int, const time: duration) {
+    let initial = target;
+    target = initial + (value - initial) * (frame / time);
+    await time;
+}
+function to(ref target: float, value: float, const time: duration) {
+    let initial = target;
+    target = initial + (value - initial) * (frame / time);
+    await time;
+}
+
+clip movie() {
+    let circ = circle(radius: 15);
+    
+    circ.x = 15;
+    circ.y = 30;
+
+    circ.x.to()
+}

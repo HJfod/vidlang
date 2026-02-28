@@ -1,0 +1,35 @@
+{
+	"name": "hjfod.vidlang-support",
+	"displayName": "Vid Language Support",
+	"description": "Support for the Vid programming language for editing videos",
+	"author": {
+		"name": "HJfod",
+		"url": "https://github.com/HJfod"
+	},
+	"repository": {
+		"url": "https://github.com/HJfod/vidlang"
+	},
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"publisher": "HJfod",
+	"version": "0.0.1",
+	"categories": ["Programming Languages"],
+	"contributes": {
+		"languages": [{
+            "id": "vid",
+            "aliases": ["Vid"],
+            "extensions": [".vid"],
+            "configuration": "./language-configuration.json",
+			"icon": {
+				"dark": "./vidlang.png",
+				"light": "./vidlang.png"
+			}
+        }],
+		"grammars": [{
+            "language": "vid",
+            "scopeName": "source.vid",
+            "path": "./vid.tmLanguage.json"
+        }]
+	}
+}

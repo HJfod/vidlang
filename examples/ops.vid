@@ -1,0 +1,67 @@
+
+// todo: mark these as the intrinsics they are
+
+module std::ops {
+    public function neg(target: int) -> int {}
+    public function neg(target: float) -> float {}
+    public function neg(target: duration) -> duration {}
+
+    public function not(target: bool) -> bool {}
+
+    public function add(a: int, b: int) -> int {}
+    public function add(a: float, b: float) -> float {}
+    public const function add(a: duration, b: duration) -> duration {}
+    public function add(a: string, b: string) -> string {}
+
+    public function sub(a: int, b: int) -> int {}
+    public function sub(a: float, b: float) -> float {}
+    public const function sub(a: duration, b: duration) -> duration {}
+
+    public function mul(a: int, b: int) -> int {}
+    public function mul(a: float, b: float) -> float {}
+    public const function mul(a: duration, b: int) -> duration {}
+    public const function mul(a: duration, b: float) -> duration {}
+
+    public function div(a: int, b: int) -> int {}
+    public function div(a: float, b: float) -> float {}
+    public const function div(a: duration, b: int) -> duration {}
+    public const function div(a: duration, b: float) -> duration {}
+
+    public function modulo(a: int, b: int) -> int {}
+    public function modulo(a: float, b: float) -> float {}
+    public const function modulo(a: duration, b: int) -> duration {}
+
+    public function raise(a: int, b: int) -> int {}
+    public function raise(a: float, b: float) -> float {}
+    public const function raise(a: duration, b: int) -> duration {}
+    public const function raise(a: duration, b: float) -> duration {}
+
+    public function more_than(a: int, b: int) -> bool {}
+    public function more_than(a: float, b: float) -> bool {}
+    public function more_than(a: duration, b: duration) -> bool {}
+
+    public function more_than_or_eq(a: int, b: int) -> bool {}
+    public function more_than_or_eq(a: float, b: float) -> bool {}
+    public function more_than_or_eq(a: duration, b: duration) -> bool {}
+
+    public function less_than(a: int, b: int) -> bool {}
+    public function less_than(a: float, b: float) -> bool {}
+    public function less_than(a: duration, b: duration) -> bool {}
+
+    public function less_than_or_eq(a: int, b: int) -> bool {}
+    public function less_than_or_eq(a: float, b: float) -> bool {}
+    public function less_than_or_eq(a: duration, b: duration) -> bool {}
+
+    public function eq(a: bool, b: bool) -> bool;
+    public function eq(a: int, b: int) -> bool;
+    public function eq(a: float, b: float) -> bool;
+    public function eq(a: duration, b: duration) -> bool;
+    public function eq(a: string, b: string) -> bool;
+
+    public function neq(a: any, b: any) -> bool {
+        return !eq(a, b);
+    }
+
+    public function length(str: string) -> int {}
+    public function length(list: [any]) -> int {}
+}

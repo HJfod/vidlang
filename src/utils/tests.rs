@@ -2,7 +2,7 @@
 #![cfg(test)]
 
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, GenericParam, Ident, LogicChainType, StringComp, Visibility},
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, Ident, IdentPath, LogicChainType, StringComp, Visibility},
     pools::{codebase::Span, exprs::{ExprId, Exprs}, names::NameId}, tokens::token::Symbol};
 
 pub trait DebugAstEq {
@@ -94,15 +94,14 @@ impl DebugAstEq for Ident {
         self.0.debug_ast_assert_eq(&other.0, exprs);
     }
 }
+impl DebugAstEq for IdentPath {
+    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
+        self.0.debug_ast_assert_eq(&other.0, exprs);
+    }
+}
 impl DebugAstEq for Visibility {
     fn debug_ast_assert_eq(&self, other: &Self, _exprs: Exprs) {
         assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
-    }
-}
-impl DebugAstEq for GenericParam {
-    fn debug_ast_assert_eq(&self, other: &Self, exprs: Exprs) {
-        self.name.debug_ast_assert_eq(&other.name, exprs.clone());
-        self.constraint.debug_ast_assert_eq(&other.constraint, exprs.clone());
     }
 }
 impl DebugAstEq for FunctionParamKind {
@@ -173,7 +172,6 @@ impl DebugAstEq for Expr {
                 Expr::Function {
                     visibility: a_visibility,
                     name: a_name,
-                    generics: a_generics,
                     params: a_params,
                     return_ty: a_return_ty,
                     body: a_body,
@@ -183,7 +181,6 @@ impl DebugAstEq for Expr {
                 Expr::Function {
                     visibility: b_visibility,
                     name: b_name,
-                    generics: b_generics,
                     params: b_params,
                     return_ty: b_return_ty,
                     body: b_body,
@@ -193,7 +190,6 @@ impl DebugAstEq for Expr {
             ) => {
                 a_visibility.debug_ast_assert_eq(b_visibility, exprs.clone());
                 a_name.debug_ast_assert_eq(b_name, exprs.clone());
-                a_generics.debug_ast_assert_eq(b_generics, exprs.clone());
                 a_params.debug_ast_assert_eq(b_params, exprs.clone());
                 a_return_ty.debug_ast_assert_eq(b_return_ty, exprs.clone());
                 a_body.debug_ast_assert_eq(b_body, exprs.clone());
@@ -307,54 +303,17 @@ impl DebugAstEq for Expr {
             (
                 Expr::TyNamed {
                     name: a_name,
-                    generics: a_generics,
                     span: _,
                 },
                 Expr::TyNamed {
                     name: b_name,
-                    generics: b_generics,
                     span: _,
                 },
             ) => {
                 a_name.debug_ast_assert_eq(b_name, exprs.clone());
-                a_generics.debug_ast_assert_eq(b_generics, exprs.clone());
-            },
-            (
-                Expr::TyAccess {
-                    from: a_from,
-                    associate: a_associate,
-                    generics: a_generics,
-                    span: _,
-                },
-                Expr::TyAccess {
-                    from: b_from,
-                    associate: b_associate,
-                    generics: b_generics,
-                    span: _,
-                },
-            ) => {
-                a_from.debug_ast_assert_eq(b_from, exprs.clone());
-                a_associate.debug_ast_assert_eq(b_associate, exprs.clone());
-                a_generics.debug_ast_assert_eq(b_generics, exprs.clone());
             },
 
             _ => panic!("DebugAstEq is missing Expr branch"),
         }
     }
 }
-
-macro_rules! assert_ast {
-    ($exprs: ident, $var: expr => $de: pat, $($rest: tt)*) => {
-        $exprs.exec($var, |e| {
-            let $de = e else { panic!() };
-            assert_ast!($exprs, $($rest)*);
-        });
-    };
-    ($exprs: ident, @run $run: expr, $($rest: tt)*) => {
-        $run;
-        assert_ast!($exprs, $($rest)*);
-    };
-    ($exprs: ident,) => {};
-}
-
-pub(crate) use assert_ast;

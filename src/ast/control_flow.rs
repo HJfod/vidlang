@@ -1,6 +1,8 @@
 
 use crate::{
-    ast::expr::{Expr, Ident, ParseArgs}, pools::exprs::{ExprId, Exprs}, tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
+    ast::expr::{Expr, ParseArgs},
+    pools::exprs::{ExprId, Exprs},
+    tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
@@ -11,7 +13,7 @@ impl Expr {
             exprs.add(Self::Block(list, span))
         }
         else {
-            exprs.add(Self::Ident(Ident(tokens.names().missing(), tk.span())))
+            exprs.add(Self::Ident(tokens.names().missing_path(tk.span())))
         }
     }
     pub(super) fn try_parse_control_flow(tokens: &mut Tokens, exprs: Exprs, args: ParseArgs)

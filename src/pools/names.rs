@@ -1,5 +1,5 @@
 use std::sync::{Arc, Mutex};
-use crate::tokens::token::Symbol;
+use crate::{ast::expr::{Ident, IdentPath}, pools::codebase::Span, tokens::token::Symbol};
 use string_interner::{self, StringInterner, backend::StringBackend};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,31 +41,41 @@ impl Names {
     pub fn missing(&self) -> NameId {
         self.add("<missing name>")
     }
-    pub fn builtin_unop_name(&self, op: Symbol) -> NameId {
+    pub fn missing_path(&self, span: Span) -> IdentPath {
+        IdentPath(vec![Ident(self.missing(), span)], span)
+    }
+    fn make_op_path(&self, func: &str, span: Span) -> IdentPath {
+        IdentPath(vec![
+            Ident(self.add("std"), span),
+            Ident(self.add("ops"), span),
+            Ident(self.add(func), span),
+        ], span)
+    }
+    pub fn builtin_unop_name(&self, op: Symbol, span: Span) -> IdentPath {
         match op {
             // Unary plus is not real (since Rust also doesn't have it and I think 
             // they're base for doing so)
-            Symbol::Minus => self.add("op_neg"),
-            Symbol::Exclamation => self.add("op_sub"),
+            Symbol::Minus => self.make_op_path("neg", span),
+            Symbol::Exclamation => self.make_op_path("not", span),
             _ => panic!("invalid op passed to builtin_unop_name"),
         }
     }
-    pub fn builtin_binop_name(&self, op: Symbol) -> NameId {
+    pub fn builtin_binop_name(&self, op: Symbol, span: Span) -> IdentPath {
         match op {
-            Symbol::Power => self.add("op_power"),
+            Symbol::Power => self.make_op_path("power", span),
 
-            Symbol::Plus => self.add("op_add"),
-            Symbol::Minus => self.add("op_sub"),
-            Symbol::Mul => self.add("op_mul"),
-            Symbol::Div => self.add("op_div"),
-            Symbol::Mod => self.add("op_mod"),
+            Symbol::Plus => self.make_op_path("add", span),
+            Symbol::Minus => self.make_op_path("sub", span),
+            Symbol::Mul => self.make_op_path("mul", span),
+            Symbol::Div => self.make_op_path("div", span),
+            Symbol::Mod => self.make_op_path("modulo", span),
 
-            Symbol::More => self.add("op_more"),
-            Symbol::Meq => self.add("op_meq"),
-            Symbol::Eq => self.add("op_eq"),
-            Symbol::Neq => self.add("op_neq"),
-            Symbol::Leq => self.add("op_leq"),
-            Symbol::Less => self.add("op_less"),
+            Symbol::More => self.make_op_path("more", span),
+            Symbol::Meq => self.make_op_path("meq", span),
+            Symbol::Eq => self.make_op_path("eq", span),
+            Symbol::Neq => self.make_op_path("neq", span),
+            Symbol::Leq => self.make_op_path("leq", span),
+            Symbol::Less => self.make_op_path("less", span),
 
             _ => panic!("invalid op passed to builtin_binop_name"),
         }
