@@ -1,5 +1,5 @@
 use slotmap::{SlotMap, new_key_type};
-use crate::{check::ty::Item, pools::PoolRef};
+use crate::check::ty::Item;
 
 new_key_type! { pub struct ItemId; }
 
@@ -9,8 +9,8 @@ pub struct Items {
 }
 
 impl Items {
-    pub fn new() -> PoolRef<Self> {
-        PoolRef::new(Self { map: SlotMap::with_key() })
+    pub fn new() -> Self {
+        Self { map: SlotMap::with_key() }
     }
     pub fn add(&mut self, item: Item) -> ItemId {
         self.map.insert(item)

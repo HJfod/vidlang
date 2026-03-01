@@ -25,13 +25,9 @@ fn main() {
             PackageAddError::DuplicateNamedPackage(e) => panic!("multiple packages with the same name found: {e}"),
         }
     };
+    codebase.parse_all(ParseArgs::default());
 
-    let messages = Messages::new();
-    let names = Names::new();
-    let exprs = Exprs::new();
-    codebase.parse_all(names.clone(), messages.clone(), exprs.clone(), ParseArgs::default());
-
-    messages.lock().release(&codebase, |msg| println!("{}", msg));
-    let (errors, warnings) = messages.lock().counts();
+    codebase.messages.release(&codebase, |msg| println!("{}", msg));
+    let (errors, warnings) = codebase.messages.counts();
     println!("Finished with {errors} errors and {warnings} warnings");
 }

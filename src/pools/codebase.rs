@@ -1,7 +1,10 @@
 use std::{collections::HashMap, ffi::OsStr, fs::read_to_string, io::Error, path::{Path, PathBuf}, range::Range, str::Chars};
 
 use crate::{
-    ast::expr::{Ast, ParseArgs, Parser}, pools::{PoolRef, exprs::Exprs, messages::Messages, names::Names}, tokens::{tokenizer::Tokenizer, tokenstream::Tokens}, utils::lookahead_iter::Looakhead
+    ast::expr::{Ast, ParseArgs},
+    pools::{exprs::Exprs, items::Items, messages::Messages, names::Names},
+    tokens::{token::Token, tokenstream::Tokens},
+    utils::lookahead_iter::Looakhead
 };
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -21,6 +24,10 @@ pub struct Codebase {
     /// Packages are the root unit of codebases. Each program and library is 
     /// one package with a root module, which may contain any number of submodules
     packages: HashMap<String, ModId>,
+    pub names: Names,
+    pub messages: Messages,
+    pub exprs: Exprs,
+    pub items: Items,
 }
 
 #[derive(Debug)]
@@ -32,7 +39,14 @@ pub enum PackageAddError {
 
 impl Codebase {
     pub fn new() -> Self {
-        Self { pool: Default::default(), packages: Default::default() }
+        Self {
+            pool: Default::default(),
+            packages: Default::default(),
+            names: Names::new(),
+            messages: Messages::new(),
+            exprs: Exprs::new(),
+            items: Items::new(),
+        }
     }
     #[cfg(test)]
     pub fn new_with_test_package(name: &str, data: &str) -> (Self, ModId) {
@@ -192,30 +206,27 @@ impl Codebase {
         self.get(id).parsed_ast.as_ref()
     }
 
-    pub fn create_src_iter(&self, id: ModId) -> Option<SrcIterator<'_>> {
-        Some(SrcIterator::new(id, self.get(id).data.as_ref()?.chars()))
+    pub fn tokenize(&mut self, id: ModId) -> Option<Tokens> {
+        // Can't use `get()` here because overlapping borrows
+        let mut iter = SrcIterator::new(id, self.pool.get(id.0)?.data.as_ref()?.chars());
+        let mut tokens = Vec::new();
+        while let Some(tk) = Token::parse(&mut iter, &mut self.names, &mut self.messages) {
+            tokens.push(tk);
+        }
+        Some(Tokens::new(tokens, "eof", Span(id, (0..0).into()),))
     }
-    pub fn tokenize(&self, id: ModId, names: PoolRef<Names>, messages: PoolRef<Messages>) -> Option<Tokens> {
-        Some(Tokens::new(
-            Tokenizer::new(&mut self.create_src_iter(id)?, names.clone(), messages.clone()).collect(),
-            "eof",
-            Span(id, (0..0).into()),
-            names,
-            messages
-        ))
-    }
-    pub fn parse_one(&mut self, id: ModId, names: PoolRef<Names>, messages: PoolRef<Messages>, exprs: PoolRef<Exprs>, args: ParseArgs) -> Option<&Ast> {
+    pub fn parse_one(&mut self, id: ModId, args: ParseArgs) -> Option<&Ast> {
         // Having to re-get this is silly but I ran into borrow checker issues
         if self.get(id).parsed_ast.is_some() {
             return self.get(id).parsed_ast.as_ref();
         }
-        let mut tokens = self.tokenize(id, names.clone(), messages.clone())?;
-        self.get_mut(id).parsed_ast = Some(Ast::parse(&mut Parser::new(&mut tokens, exprs, args)));
+        let mut tokens = self.tokenize(id)?;
+        self.get_mut(id).parsed_ast = Some(Ast::parse(&mut tokens, self, args));
         self.get(id).parsed_ast.as_ref()
     }
-    pub fn parse_all(&mut self, names: PoolRef<Names>, messages: PoolRef<Messages>, exprs: PoolRef<Exprs>, args: ParseArgs) {
+    pub fn parse_all(&mut self, args: ParseArgs) {
         for id in self.pool.iter().enumerate().map(|m| ModId(m.0)).collect::<Vec<_>>() {
-            self.parse_one(id, names.clone(), messages.clone(), exprs.clone(), args);
+            self.parse_one(id, args);
         }
     }
 }
@@ -308,7 +319,7 @@ impl Span {
 #[test]
 fn src_iter() {
     let (codebase, id) = Codebase::new_with_test_package("test_src_iter", "abcdefg");
-    let mut iter = codebase.create_src_iter(id).unwrap();
+    let mut iter = SrcIterator::new(id, codebase.get(id).data.as_ref().unwrap().chars());
     for ch in 'a'..='g' {
         assert_eq!(iter.peek(), Some(ch));
         assert_eq!(iter.next(), Some(ch));

@@ -1,4 +1,4 @@
-use crate::{ast::expr::{Ident, IdentPath}, pools::{PoolRef, codebase::Span}, tokens::token::Symbol};
+use crate::{ast::expr::{Ident, IdentPath}, pools::codebase::Span, tokens::token::Symbol};
 use string_interner::{self, StringInterner, backend::StringBackend};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -21,10 +21,8 @@ pub struct Names {
 }
 
 impl Names {
-    pub fn new() -> PoolRef<Self> {
-        PoolRef::new(Self {
-            names: StringInterner::new()
-        })
+    pub fn new() -> Self {
+        Self { names: StringInterner::new() }
     }
     pub fn add(&mut self, name: &str) -> NameId {
         self.names.get_or_intern(name)

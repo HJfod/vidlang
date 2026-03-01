@@ -1,5 +1,5 @@
 use slotmap::{SlotMap, new_key_type};
-use crate::{ast::expr::Expr, pools::PoolRef};
+use crate::ast::expr::Expr;
 
 new_key_type! { pub struct ExprId; }
 
@@ -9,8 +9,8 @@ pub struct Exprs {
 }
 
 impl Exprs {
-    pub fn new() -> PoolRef<Self> {
-        PoolRef::new(Self { map: SlotMap::with_key() })
+    pub fn new() -> Self {
+        Self { map: SlotMap::with_key() }
     }
     pub fn add(&mut self, expr: Expr) -> ExprId {
         self.map.insert(expr)

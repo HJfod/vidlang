@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use crate::pools::{PoolRef, codebase::{Codebase, Span}};
+use crate::pools::codebase::{Codebase, Span};
 
 #[derive(Debug)]
 pub enum NoteLevel {
@@ -84,10 +84,8 @@ pub struct Messages {
 }
 
 impl Messages {
-    pub fn new() -> PoolRef<Self> {
-        PoolRef::new(Self {
-            messages: Vec::new()
-        })
+    pub fn new() -> Self {
+        Self { messages: Vec::new() }
     }
     pub fn add(&mut self, msg: Message) {
         self.messages.push(msg);
