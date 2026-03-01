@@ -1,4 +1,8 @@
-use crate::{ast::expr::{Expr, ParseArgs}, pools::{codebase::Codebase, exprs::ExprId}, tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}};
+use crate::{
+    ast::expr::{Expr, ParseArgs},
+    pools::{codebase::Codebase, exprs::ExprId},
+    tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
+};
 
 impl Expr {
     pub(super) fn parse_type(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
@@ -26,9 +30,7 @@ impl Expr {
 
 #[test]
 fn type_parse() {
-    use crate::pools::codebase::Codebase;
     use crate::ast::expr::ParseArgs;
-
     let (mut codebase, _) = Codebase::new_with_test_package("test_type_parse", r#"
         let x: A::B::C;
         let y: [string];

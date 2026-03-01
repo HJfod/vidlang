@@ -1,7 +1,7 @@
 
 use crate::{pools::{
     names::NameId,
-    codebase::Span
+    modules::Span
 }, tokens::tokenstream::Tokens};
 
 #[derive(Debug, Clone, Copy, PartialEq)]

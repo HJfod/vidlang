@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{check::ty::Item, pools::{codebase::{Codebase, ModId}, items::{ItemId, Items}, names::Names}};
+use crate::{check::ty::Item, pools::{modules::{Modules, ModId}, items::{ItemId, Items}, names::Names}};
 
 pub struct Checker {
     package_roots: HashMap<String, ItemId>,
@@ -9,7 +9,7 @@ pub struct Checker {
 // impl Checker {
 //     pub fn new(codebase: &mut Codebase) -> Self {
 //         let pkgs = codebase.packages()
-//                 // Because we can't have multiple borrows into Codebase...
+//                 // Because we can't have multiple borrows into Modules...
 //                 .map(|p| (p.0.to_owned(), p.1))
 //                 .collect::<Vec<_>>().into_iter();
 //         Self {
@@ -49,7 +49,7 @@ pub struct Checker {
 
 // #[test]
 // fn type_checker() {
-//     use crate::pools::codebase::Codebase;
+//     use crate::pools::codebase::Modules;
 //     use crate::pools::messages::Messages;
 //     use crate::pools::exprs::Exprs;
 //     use crate::pools::names::Names;

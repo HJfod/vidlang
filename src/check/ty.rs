@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ast::expr::Expr, pools::{codebase::ModId, exprs::ExprId, items::ItemId, names::NameId}};
+use crate::{ast::expr::Expr, pools::{modules::ModId, exprs::ExprId, items::ItemId, names::NameId}};
 
 #[derive(Debug)]
 pub enum Ty {

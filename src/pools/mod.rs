@@ -1,6 +1,7 @@
 
 pub mod names;
-pub mod codebase;
+pub mod modules;
 pub mod messages;
 pub mod exprs;
 pub mod items;
+pub mod codebase;

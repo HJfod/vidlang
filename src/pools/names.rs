@@ -1,4 +1,4 @@
-use crate::{ast::expr::{Ident, IdentPath}, pools::codebase::Span, tokens::token::Symbol};
+use crate::{ast::expr::{Ident, IdentPath}, pools::modules::Span, tokens::token::Symbol};
 use string_interner::{self, StringInterner, backend::StringBackend};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

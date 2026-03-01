@@ -171,7 +171,6 @@ impl Expr {
 
 #[test]
 fn parse_arrow_function() {
-    use crate::pools::codebase::Codebase;
     use crate::ast::expr::ParseArgs;
 
     let (mut codebase, _) = Codebase::new_with_test_package("parse_arrow_function", r#"

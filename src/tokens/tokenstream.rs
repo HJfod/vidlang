@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     ast::expr::Ident,
-    pools::{codebase::{Codebase, Span}, messages::Message},
+    pools::{codebase::Codebase, messages::Message, modules::Span},
     tokens::token::{BracketType, Symbol, Token},
     utils::lookahead_iter::Looakhead
 };
@@ -204,7 +204,7 @@ fn tokenizing() {
         "Hello, world!\n\t";
     "#);
 
-    let mut tokens = codebase.tokenize(id).unwrap();
+    let mut tokens = codebase.tokenize_mod(id).unwrap();
     tokens.expect_symbol(Symbol::Let, &mut codebase);
     tokens.expect_ident(&mut codebase);
     tokens.expect_symbol(Symbol::AddAssign, &mut codebase);

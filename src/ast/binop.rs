@@ -304,7 +304,6 @@ impl Expr {
 
 #[test]
 fn ambiguous_exprs() {
-    use crate::pools::codebase::Codebase;
     use crate::ast::expr::ParseArgs;
 
     let test_expr = |data: &str| {
@@ -327,7 +326,7 @@ fn ambiguous_exprs() {
 
 #[test]
 fn binop() {
-    use crate::pools::codebase::{Codebase, Span};
+    use crate::pools::modules::{Modules, Span};
     use crate::utils::tests::DebugAstEq;
     use crate::ast::expr::ParseArgs;
 
@@ -342,7 +341,7 @@ fn binop() {
         "messages was not empty:\n{}", codebase.messages.to_test_string(&codebase)
     );
 
-    let ast = codebase.get_ast_for(id).unwrap().exprs();
+    let ast = codebase.modules.get_ast_for(id).unwrap().exprs();
     assert_eq!(ast.len(), 1);
 
     // macro_rules! add_to_exprs_after {

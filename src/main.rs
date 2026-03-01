@@ -1,7 +1,7 @@
 #![feature(new_range_api)]
 
 use clap::Parser;
-use crate::{ast::expr::ParseArgs, pools::{codebase::{Codebase, PackageAddError}, exprs::Exprs, messages::Messages, names::Names}};
+use crate::{ast::expr::ParseArgs, pools::{codebase::Codebase, modules::PackageAddError}};
 
 mod ast;
 mod pools;
@@ -17,7 +17,7 @@ fn main() {
     let dir = std::env::current_dir().expect("Unable to get current directory");
     
     let mut codebase = Codebase::new();
-    match codebase.add_package("project".into(), &dir) {
+    match codebase.modules.add_package("project".into(), &dir) {
         Ok(c) => c,
         Err(e) => match e {
             PackageAddError::UnableToReadFile(p, e) => panic!("unable to read file {}: {e}", p.display()),

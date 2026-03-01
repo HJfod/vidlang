@@ -1,5 +1,6 @@
 use std::fmt::Display;
-use crate::pools::codebase::{Codebase, Span};
+use crate::pools::codebase::Codebase;
+use crate::pools::modules::Span;
 
 #[derive(Debug)]
 pub enum NoteLevel {
@@ -110,7 +111,7 @@ impl Messages {
             if let Some(span) = msg.span {
                 formatted.push_str(&format!(
                     "[{}:{}..{}] ",
-                    codebase.get_full_mod_name(span.id()),
+                    codebase.modules.get_full_mod_name(span.id()),
                     span.start(), span.end(),
                 ));
             }

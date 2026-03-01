@@ -2,7 +2,7 @@
 use std::str::FromStr;
 
 use crate::{pools::{
-    codebase::{Span, SrcIterator}, messages::{Message, Messages}, names::Names
+    messages::{Message, Messages}, modules::{Span, SrcIterator}, names::Names
 }, tokens::{token::{BracketType, Duration, StrLitComp, Symbol, Token}, tokenstream::Tokens}};
 use unicode_xid::UnicodeXID;
 
@@ -314,7 +314,7 @@ fn strings() {
         "String with\nmore lines and\n\tescape sequences!"
         "String with {  interpolation  } and {stuff}{}"
     "#);
-    let mut tokens = codebase.tokenize(id).unwrap();
+    let mut tokens = codebase.tokenize_mod(id).unwrap();
 
     let Some(Token::String(escaped_vec, _)) = tokens.next() else { panic!() };
     assert_eq!(escaped_vec.len(), 1, "string literal parts: {escaped_vec:?}");
@@ -345,7 +345,7 @@ fn tokenizer() {
         // This is a comment and it should not show up!
         let x += 5;
     "#);
-    let tokens = codebase.tokenize(id).unwrap().collect::<Vec<_>>();
+    let tokens = codebase.tokenize_mod(id).unwrap().collect::<Vec<_>>();
     assert!(codebase.messages.count_total() == 0, "{:?}", codebase.messages);
     assert_eq!(tokens.len(), 5);
     assert!(matches!(tokens[0], Token::Symbol(Symbol::Let, _)));
@@ -365,7 +365,7 @@ fn units() {
             10.2frames 20unknown
         "#
     );
-    let mut tokens = codebase.tokenize(id).unwrap();
+    let mut tokens = codebase.tokenize_mod(id).unwrap();
     assert!(matches!(tokens.next(), Some(Token::Duration(Duration::Seconds(5.0), _))));
     assert!(matches!(tokens.next(), Some(Token::Duration(Duration::Seconds(0.0606), _))));
     assert!(matches!(tokens.next(), Some(Token::Duration(Duration::Frames(17), _))));

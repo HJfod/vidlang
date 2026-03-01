@@ -1,6 +1,6 @@
 
 use crate::{
-    pools::{codebase::{Codebase, Span}, exprs::ExprId, names::NameId}, 
+    pools::{codebase::Codebase, exprs::ExprId, modules::{Modules, Span}, names::NameId}, 
     tokens::{token::{Duration, Symbol}, tokenstream::Tokens}
 };
 
@@ -229,8 +229,6 @@ impl Ast {
 
 #[test]
 fn invalid_parses() {
-    use crate::pools::codebase::Codebase;
-
     let test_expr = |data: &str| {
         let (mut codebase, id) = Codebase::new_with_test_package("invalid_parses", data);
         codebase.parse_all(ParseArgs {
@@ -240,7 +238,7 @@ fn invalid_parses() {
             codebase.messages.counts().0 > 0,
             "`{data}` didn't result in errors:\n{}\ninstead got ast: {:#?}",
             codebase.messages.to_test_string(&codebase),
-            codebase.get_ast_for(id)
+            codebase.modules.get_ast_for(id)
         );
     };
 
@@ -253,7 +251,7 @@ fn invalid_parses() {
 
 #[test]
 fn parse() {
-    use crate::pools::codebase::Codebase;
+    use crate::pools::modules::Modules;
     use crate::utils::tests::DebugAstEq;
 
     let (mut codebase, id) = Codebase::new_with_test_package("test_parse", r#"
@@ -270,7 +268,7 @@ fn parse() {
         "messages was not empty:\n{}", codebase.messages.to_test_string(&codebase)
     );
 
-    let ast_exprs = &codebase.get_ast_for(id).unwrap().0;
+    let ast_exprs = &codebase.modules.get_ast_for(id).unwrap().0;
     assert_eq!(ast_exprs.len(), 2);
 
     // let eq_ast = vec![
