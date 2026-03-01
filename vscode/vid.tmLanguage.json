@@ -68,7 +68,7 @@
 				},
 				{
 					"name": "constant.language.vid",
-					"match": "\\b(true|false|self)\\b"
+					"match": "\\b(true|false|self|frame|framerate)\\b"
 				},
 				{
 					"name": "variable.other.constant.vid",

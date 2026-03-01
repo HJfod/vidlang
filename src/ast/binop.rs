@@ -377,7 +377,7 @@ fn binop() {
     );
     let binop_tree = codebase.exprs.add(binop_tree);
 
-    let ast = codebase.modules.get_ast_for(id).unwrap().exprs();
+    let ast = codebase.parsed_asts.get(&id).unwrap().exprs();
     assert_eq!(ast.len(), 1);
     ast.debug_ast_assert_eq(
         &[codebase.exprs.add(Expr::Yield(binop_tree, Span::zero(id)))],

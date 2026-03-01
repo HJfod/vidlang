@@ -14,7 +14,6 @@ pub struct SrcModule {
     pub data: Option<String>,
     pub parent: Option<ModId>,
     pub submodules: HashMap<String, ModId>,
-    pub parsed_ast: Option<Ast>,
 }
 
 pub struct Modules {
@@ -52,12 +51,11 @@ impl Modules {
             data: None,
             parent: None,
             submodules: HashMap::new(),
-            parsed_ast: None,
         });
 
         // And then find all submodules
         match self.discover_modules_in_dir(root_id, root_dir) {
-            Ok(s) => self.get_mut(root_id).submodules = s,
+            Ok(s) => self.pool.get_mut(root_id.0).unwrap().submodules = s,
             Err(e) => {
                 // Remove everything new added to the pool if we ran into an 
                 // error, so we don't leave stuff in there
@@ -79,7 +77,6 @@ impl Modules {
             data: Some(data.to_string()),
             parent: None,
             submodules: HashMap::new(),
-            parsed_ast: None
         });
         self.packages.insert(name.to_string(), id);
         id
@@ -116,7 +113,7 @@ impl Modules {
                 Some(existing_id) => {
                     // Prefer file modules as the paths; if the existing one isn't 
                     // a file path, update it
-                    let existing = self.get_mut(*existing_id);
+                    let existing = self.pool.get_mut(existing_id.0).unwrap();
                     if existing.path.extension() != Some(OsStr::new("vid")) {
                         existing.path = path.clone();
                     }
@@ -130,7 +127,6 @@ impl Modules {
                         data: None,
                         parent: Some(parent_id),
                         submodules: HashMap::new(),
-                        parsed_ast: None
                     });
                     modules.insert(sub_mod_name.clone(), new_id);
                     new_id
@@ -149,7 +145,7 @@ impl Modules {
                         self.get(sub_mod_id).submodules.len()
                     );
                 }
-                self.get_mut(sub_mod_id).submodules = submodules;
+                self.pool.get_mut(sub_mod_id.0).unwrap().submodules = submodules;
             }
             else {
                 let data = read_to_string(&path).map_err(
@@ -161,21 +157,18 @@ impl Modules {
                         sub_mod_name
                     );
                 }
-                self.get_mut(sub_mod_id).data = Some(data);
+                self.pool.get_mut(sub_mod_id.0).unwrap().data = Some(data);
             }
         }
         Ok(modules)
     }
 
-    pub fn get_mut(&mut self, id: ModId) -> &mut SrcModule {
-        self.pool.get_mut(id.0).expect("Modules has handed out an invalid ModId")
-    }
     pub fn get(&self, id: ModId) -> &SrcModule {
         self.pool.get(id.0).expect("Modules has handed out an invalid ModId")
     }
 
     pub fn all(&self) -> impl Iterator<Item = ModId> + use<> {
-        std::range::Range::from(0..self.pool.len()).into_iter().map(|n| ModId(n))
+        std::range::Range::from(0..self.pool.len()).into_iter().map(ModId)
     }
     pub fn packages(&self) -> impl Iterator<Item = (&str, ModId)> {
         self.packages.iter().map(|p| (p.0.as_str(), *p.1))
@@ -194,9 +187,6 @@ impl Modules {
             res = self.get_full_mod_name(p) + "::" + &res;
         }
         res
-    }
-    pub fn get_ast_for(&self, id: ModId) -> Option<&Ast> {
-        self.get(id).parsed_ast.as_ref()
     }
 }
 

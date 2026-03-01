@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ast::expr::Expr, pools::{modules::ModId, exprs::ExprId, items::ItemId, names::NameId}};
+use crate::{ast::expr::Expr, check::ir::ConstValue, pools::{exprs::ExprId, items::ItemId, modules::ModId, names::NameId}};
 
 #[derive(Debug)]
 pub enum Ty {
@@ -24,15 +24,6 @@ pub enum Ty {
     /// Type produced by non-exhaustive constructs (i.e. value is never assignable)
     // todo: maybe put all exprs in a pool for stuff like this?
     NonExhaustive(Expr),
-}
-
-#[derive(Debug)]
-pub enum ConstValue {
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Duration(f64),
-    String(String),
 }
 
 #[derive(Debug)]
