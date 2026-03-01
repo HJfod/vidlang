@@ -199,6 +199,10 @@ impl Expr {
             Self::TyArray { span, .. } => *span,
         }
     }
+    #[cfg(test)]
+    pub fn add_into(self, codebase: &mut Codebase) -> ExprId {
+        codebase.exprs.add(self)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -268,57 +272,56 @@ fn parse() {
         "messages was not empty:\n{}", codebase.messages.to_test_string(&codebase)
     );
 
+    let eq_ast = vec![
+        Expr::Var {
+            visibility: Visibility::Private,
+            name: Ident(codebase.names.add("x"), Span::zero(id)),
+            ty: None,
+            value: Some(codebase.exprs.add(Expr::Int(8, Span::zero(id)))),
+            span: Span::zero(id),
+            is_const: false,
+        }.add_into(&mut codebase),
+        Expr::If {
+            clause: Expr::Call {
+                target: Expr::Ident(codebase.names.builtin_binop_name(Symbol::More, Span::zero(id))).add_into(&mut codebase),
+                args: vec![
+                    (None, Expr::Ident(IdentPath(
+                        vec![Ident(codebase.names.add("x"), Span::zero(id))],
+                        Span::zero(id)
+                    )).add_into(&mut codebase)),
+                    (None, codebase.exprs.add(Expr::Int(5, Span::zero(id)))),
+                ],
+                op: Some((Symbol::More, Span::zero(id))),
+                span: Span::zero(id)
+            }.add_into(&mut codebase),
+            truthy: Expr::Block(vec![
+                Expr::Assign {
+                    target: Expr::Ident(IdentPath(
+                        vec![Ident(codebase.names.add("x"), Span::zero(id))],
+                        Span::zero(id)
+                    )).add_into(&mut codebase),
+                    value: Expr::Call {
+                        target: codebase.exprs.add(Expr::Ident(IdentPath(
+                            vec![
+                                Ident(codebase.names.add("lib"), Span::zero(id)),
+                                Ident(codebase.names.add("hi_guys"), Span::zero(id)),
+                            ],
+                            Span::zero(id)
+                        ))),
+                        args: vec![],
+                        op: None,
+                        span: Span::zero(id)
+                    }.add_into(&mut codebase),
+                    op: (Symbol::AddAssign, Span::zero(id)),
+                    span: Span::zero(id)
+                }.add_into(&mut codebase)
+            ], Span::zero(id)).add_into(&mut codebase),
+            falsy: None,
+            span: Span::zero(id)
+        }.add_into(&mut codebase)
+    ];
+
     let ast_exprs = &codebase.modules.get_ast_for(id).unwrap().0;
     assert_eq!(ast_exprs.len(), 2);
-
-    // let eq_ast = vec![
-    //     exprs.add(Expr::Var {
-    //         visibility: Visibility::Private,
-    //         name: Ident(names.add("x"), Span::zero(id)),
-    //         ty: None,
-    //         value: Some(exprs.add(Expr::Int(8, Span::zero(id)))),
-    //         span: Span::zero(id),
-    //         is_const: false,
-    //     }),
-    //     exprs.add(Expr::If {
-    //         clause: exprs.add(Expr::Call {
-    //             target: exprs.add(Expr::Ident(names.builtin_binop_name(Symbol::More, Span::zero(id)))),
-    //             args: vec![
-    //                 (None, exprs.add(Expr::Ident(IdentPath(
-    //                     vec![Ident(names.add("x"), Span::zero(id))],
-    //                     Span::zero(id)
-    //                 )))),
-    //                 (None, exprs.add(Expr::Int(5, Span::zero(id)))),
-    //             ],
-    //             op: Some((Symbol::More, Span::zero(id))),
-    //             span: Span::zero(id)
-    //         }),
-    //         truthy: exprs.add(Expr::Block(vec![
-    //             exprs.add(Expr::Assign {
-    //                 target: exprs.add(Expr::Ident(IdentPath(
-    //                     vec![Ident(names.add("x"), Span::zero(id))],
-    //                     Span::zero(id)
-    //                 ))),
-    //                 value: exprs.add(Expr::Call {
-    //                     target: exprs.add(Expr::Ident(IdentPath(
-    //                         vec![
-    //                             Ident(names.add("lib"), Span::zero(id)),
-    //                             Ident(names.add("hi_guys"), Span::zero(id)),
-    //                         ],
-    //                         Span::zero(id)
-    //                     ))),
-    //                     args: vec![],
-    //                     op: None,
-    //                     span: Span::zero(id)
-    //                 }),
-    //                 op: (Symbol::AddAssign, Span::zero(id)),
-    //                 span: Span::zero(id)
-    //             })
-    //         ], Span::zero(id))),
-    //         falsy: None,
-    //         span: Span::zero(id)
-    //     })
-    // ];
-
-    // ast_exprs.debug_ast_assert_eq(&eq_ast, exprs.deref());
+    ast_exprs.debug_ast_assert_eq(&eq_ast, &codebase);
 }

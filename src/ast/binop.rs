@@ -326,7 +326,7 @@ fn ambiguous_exprs() {
 
 #[test]
 fn binop() {
-    use crate::pools::modules::{Modules, Span};
+    use crate::pools::modules::Span;
     use crate::utils::tests::DebugAstEq;
     use crate::ast::expr::ParseArgs;
 
@@ -341,48 +341,46 @@ fn binop() {
         "messages was not empty:\n{}", codebase.messages.to_test_string(&codebase)
     );
 
+    let make_shit_up = |op: Symbol, lhs: Expr, rhs: Expr, codebase: &mut Codebase| {
+        let target = codebase.exprs.add(Expr::Ident(codebase.names.builtin_binop_name(op, Span::zero(id))));
+        let lhs = codebase.exprs.add(lhs);
+        let rhs = codebase.exprs.add(rhs);
+        Expr::Call {
+            target,
+            args: vec![(None, lhs), (None, rhs)],
+            op: Some((op, Span::zero(id))),
+            span: Span::zero(id)
+        }
+    };
+
+    // I live in väldigt sad
+    let binop_tree = make_shit_up(Symbol::Plus,
+        make_shit_up(Symbol::Minus,
+            make_shit_up(Symbol::Plus,
+                Expr::Int(1, Span::zero(id)),
+                make_shit_up(Symbol::Mul,
+                    Expr::Int(2, Span::zero(id)),
+                    make_shit_up(Symbol::Power,
+                        Expr::Int(3, Span::zero(id)),
+                        Expr::Int(4, Span::zero(id)),
+                        &mut codebase,
+                    ),
+                    &mut codebase,
+                ),
+                &mut codebase,
+            ),
+            Expr::Int(5, Span::zero(id)),
+            &mut codebase,
+        ),
+        Expr::Int(6, Span::zero(id)),
+        &mut codebase,
+    );
+    let binop_tree = codebase.exprs.add(binop_tree);
+
     let ast = codebase.modules.get_ast_for(id).unwrap().exprs();
     assert_eq!(ast.len(), 1);
-
-    // macro_rules! add_to_exprs_after {
-    //     ($ex: expr) => {
-    //         {
-    //             let e = $ex;
-    //             codebase.exprs.add(e)
-    //         }
-    //     };
-    // }
-
-    // let make_shit_up = |op: Symbol, codebase: &mut Codebase, lhs: ExprId, rhs: ExprId| {
-    //     let target = codebase.exprs.add(Expr::Ident(codebase.names.builtin_binop_name(op, Span::zero(id))));
-    //     codebase.exprs.add(Expr::Call {
-    //         target,
-    //         args: vec![(None, lhs), (None, rhs)],
-    //         op: Some((op, Span::zero(id))),
-    //         span: Span::zero(id)
-    //     })
-    // };
-
-    // ast.debug_ast_assert_eq(
-    //     &[add_to_exprs_after!(Expr::Yield(
-    //         make_shit_up(Symbol::Plus, &mut codebase,
-    //             make_shit_up(Symbol::Minus, &mut codebase,
-    //                 make_shit_up(Symbol::Plus, &mut codebase,
-    //                     add_to_exprs_after!(Expr::Int(1, Span::zero(id))),
-    //                     make_shit_up(Symbol::Mul, &mut codebase,
-    //                         add_to_exprs_after!(Expr::Int(2, Span::zero(id))),
-    //                         make_shit_up(Symbol::Power, &mut codebase,
-    //                             add_to_exprs_after!(Expr::Int(3, Span::zero(id))),
-    //                             add_to_exprs_after!(Expr::Int(4, Span::zero(id))),
-    //                         ),
-    //                     ),
-    //                 ),
-    //                 add_to_exprs_after!(Expr::Int(5, Span::zero(id))),
-    //             ),
-    //             add_to_exprs_after!(Expr::Int(6, Span::zero(id))),
-    //         ),
-    //         Span::zero(id)
-    //     ))],
-    //     &codebase
-    // );
+    ast.debug_ast_assert_eq(
+        &[codebase.exprs.add(Expr::Yield(binop_tree, Span::zero(id)))],
+        &codebase
+    );
 }
