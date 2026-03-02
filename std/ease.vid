@@ -1,0 +1,29 @@
+
+// Huge thank you to https://easings.net/sv for the algorithms
+
+// UNRESOLVED QUESTIONS:
+// `apply_easing` shouldn't have a `frame` or `duration` should it?
+// What happens if you stack two easings on top of each other? What if you do it like this:
+// ```
+// a.sine_in_out().sine_in_out();
+// vs
+// a.sine_in_out();
+// a.sine_in_out();
+// ```
+
+// SOLUTIONS:
+// Have easing functions take ownership of the Durational, warn if you pass in 
+// a Clip because that's probably not intentional
+
+private function apply_easing(target: Durational, algo: (float) => float) {
+    // todo: warn if `target` is a `Clip`
+    if target.DURATION > 0 {
+        // Normalize variable to go from 0 to 1
+        target.frame = algo(target.frame / target.DURATION) * target.DURATION;
+    }
+    await target;
+}
+
+function sine_in_out(target: Durational) {
+    await target.apply_easing(x => -(std::math::cos(std::math::constants::PI * x) - 1) / 2);
+}

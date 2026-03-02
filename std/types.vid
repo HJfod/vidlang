@@ -1,0 +1,30 @@
+
+// Every type satisfies Any
+intrinsic type Any;
+
+// Special duration that lasts forever
+// Awaiting this duration is illegal, since it would make the video last 
+// literally forever
+intrinsic const forever: duration;
+
+type Durational = {
+    const DURATION: duration;
+    frame: int;
+}
+
+type Vec = {
+    x: float;
+    y: float;
+}
+
+type Clip = {
+    const DURATION: duration;
+    frame: int;
+
+    position: Vec;
+    scale: Vec;
+    skew: Vec;
+    rotation: float;
+
+    children: [Clip];
+}

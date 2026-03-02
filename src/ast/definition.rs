@@ -74,7 +74,12 @@ impl Expr {
             else {
                 Vec::new()
             };
-            return Some(codebase.exprs.add(Expr::Module { name, items, span: tokens.span_from(start) }))
+            return Some(codebase.exprs.add(Expr::Module {
+                visibility,
+                name,
+                items,
+                span: tokens.span_from(start)
+            }))
         }
 
         // Function or clip definition

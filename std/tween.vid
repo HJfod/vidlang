@@ -1,0 +1,17 @@
+
+function lerp_to(ref target: int, value: int, const time: duration) {
+    let initial = target;
+    target = initial + (value - initial) * (frame / time);
+    await time;
+}
+function lerp_to(ref target: float, value: float, const time: duration) {
+    let initial = target;
+    target = initial + (value - initial) * (frame / time);
+    await time;
+}
+function lerp_by(ref target: int, add: int, const time: duration) {
+    await target.lerp_to(target + add, time);
+}
+function lerp_by(ref target: float, add: float, const time: duration) {
+    await target.lerp_to(target + add, time);
+}

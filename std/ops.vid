@@ -1,0 +1,118 @@
+
+// Casting to/from an integer or float
+// If you want to convert a float to an int, use one of the rounding functions 
+// from `std::math`
+intrinsic const function to_float(value: int) -> float;
+
+// Casting to/from a duration (if you need to do more complex math on one)
+intrinsic const function to_seconds(value: duration) -> float;
+intrinsic const function to_milliseconds(value: duration) -> float;
+intrinsic const function to_frames(value: duration) -> int;
+intrinsic const function to_duration(value: int) -> duration;
+intrinsic const function to_duration(value: float) -> duration;
+
+// Converting to string
+// Deliberately not implemented for duration because I'm not convinced that 
+// would be desirable (and also, what format would it take, and also, if you 
+// really want that then convert the duration into a number first)
+
+type FmtAlignment = {
+    oneof {
+        right,
+        middle,
+        left,
+    }
+}
+
+intrinsic const function to_string(value: bool) -> string;
+intrinsic const function to_string(
+    value: int,
+    pad: { base: string, align: FmtAlignment = FmtAlignment::Right }? = none,
+    
+) -> string;
+intrinsic const function to_string(
+    value: float,
+    pad: { base: string, align: FmtAlignment = FmtAlignment::Right }? = none,
+    precision: int? = none,
+) -> string;
+intrinsic const function to_string(value: string) -> string;
+
+// !a
+intrinsic const function not(target: bool) -> bool;
+
+// -a
+intrinsic const function neg(target: int) -> int;
+intrinsic const function neg(target: float) -> float;
+intrinsic const function neg(target: duration) -> duration;
+
+// a + b
+intrinsic const function add(a: int, b: int) -> int;
+intrinsic const function add(a: float, b: float) -> float;
+intrinsic const function add(a: duration, b: duration) -> duration;
+intrinsic const function add(a: string, b: string) -> string;
+intrinsic const function add(a: [Any], b: typeof a) -> typeof a;
+
+// a - b
+intrinsic const function sub(a: int, b: int) -> int;
+intrinsic const function sub(a: float, b: float) -> float;
+intrinsic const function sub(a: duration, b: duration) -> duration;
+
+// a * b
+intrinsic const function mul(a: int, b: int) -> int;
+intrinsic const function mul(a: float, b: float) -> float;
+intrinsic const function mul(a: duration, b: int) -> duration;
+intrinsic const function mul(a: duration, b: float) -> duration;
+
+// a / b
+intrinsic const function div(a: int, b: int) -> int;
+intrinsic const function div(a: float, b: float) -> float;
+intrinsic const function div(a: duration, b: int) -> duration;
+intrinsic const function div(a: duration, b: float) -> duration;
+
+// a mod b
+intrinsic const function modulo(a: int, b: int) -> int;
+intrinsic const function modulo(a: float, b: float) -> float;
+intrinsic const function modulo(a: duration, b: int) -> duration;
+
+// a ** b
+intrinsic const function raise(a: int, b: int) -> int;
+intrinsic const function raise(a: float, b: float) -> float;
+intrinsic const function raise(a: duration, b: int) -> duration;
+intrinsic const function raise(a: duration, b: float) -> duration;
+
+// a > b
+intrinsic const function more_than(a: int, b: int) -> bool;
+intrinsic const function more_than(a: float, b: float) -> bool;
+intrinsic const function more_than(a: duration, b: duration) -> bool;
+
+// a >= b
+intrinsic const function more_than_or_eq(a: int, b: int) -> bool;
+intrinsic const function more_than_or_eq(a: float, b: float) -> bool;
+intrinsic const function more_than_or_eq(a: duration, b: duration) -> bool;
+
+// a < b
+intrinsic const function less_than(a: int, b: int) -> bool;
+intrinsic const function less_than(a: float, b: float) -> bool;
+intrinsic const function less_than(a: duration, b: duration) -> bool;
+
+// a <= b
+intrinsic const function less_than_or_eq(a: int, b: int) -> bool;
+intrinsic const function less_than_or_eq(a: float, b: float) -> bool;
+intrinsic const function less_than_or_eq(a: duration, b: duration) -> bool;
+
+// a == b
+intrinsic const function eq(a: bool, b: bool) -> bool;
+intrinsic const function eq(a: int, b: int) -> bool;
+intrinsic const function eq(a: float, b: float) -> bool;
+intrinsic const function eq(a: duration, b: duration) -> bool;
+intrinsic const function eq(a: string, b: string) -> bool;
+
+// a != b
+intrinsic const function neq(a: bool, b: bool) -> bool;
+intrinsic const function neq(a: int, b: int) -> bool;
+intrinsic const function neq(a: float, b: float) -> bool;
+intrinsic const function neq(a: duration, b: duration) -> bool;
+intrinsic const function neq(a: string, b: string) -> bool;
+
+// a[b]
+intrinsic const function index(list: [Any]) -> (typeof list)::Item;

@@ -80,6 +80,7 @@ pub enum Expr {
         span: Span,
     },
     Module {
+        visibility: Visibility,
         name: IdentPath,
         items: Vec<ExprId>,
         span: Span,

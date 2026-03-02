@@ -1,0 +1,9 @@
+
+intrinsic const function length(str: string) -> int;
+
+intrinsic const function parse_int(str: string) -> int;
+intrinsic const function parse_float(str: string) -> int;
+
+intrinsic const function to_lowercase(str: string) -> string;
+intrinsic const function to_uppercase(str: string) -> string;
+intrinsic const function strip(str: string) -> string;
