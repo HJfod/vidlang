@@ -4,28 +4,28 @@ module constants {
     const E: float = 2.718281828459045;
 }
 
-intrinsic const function abs(value: int) -> int;
-intrinsic const function abs(value: float) -> float;
+intrinsic function abs(value: int) -> int;
+intrinsic function abs(value: float) -> float;
 
-intrinsic const function sqrt(value: float) -> float;
+intrinsic function sqrt(value: float) -> float;
 
-intrinsic const function sin(value: float) -> float;
-intrinsic const function cos(value: float) -> float;
-intrinsic const function tan(value: float) -> float;
+intrinsic function sin(value: float) -> float;
+intrinsic function cos(value: float) -> float;
+intrinsic function tan(value: float) -> float;
 
-intrinsic const function asin(value: float) -> float;
-intrinsic const function acos(value: float) -> float;
-intrinsic const function atan(value: float) -> float;
-intrinsic const function atan2(x: float, y: float) -> float;
+intrinsic function asin(value: float) -> float;
+intrinsic function acos(value: float) -> float;
+intrinsic function atan(value: float) -> float;
+intrinsic function atan2(x: float, y: float) -> float;
 
 // Returns the natural logarithm of the value
-intrinsic const function log(value: float) -> float;
+intrinsic function log(value: float) -> float;
 
-intrinsic const function round(value: float) -> int;
-intrinsic const function ceil(value: float) -> int;
-intrinsic const function floor(value: float) -> int;
+intrinsic function round(value: float) -> int;
+intrinsic function ceil(value: float) -> int;
+intrinsic function floor(value: float) -> int;
 
-const function clamp(value: float, min: float, max: float) -> float {
+function clamp(value: float, min: float, max: float) -> float {
     if value < min {
         return min;
     }

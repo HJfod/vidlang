@@ -1,0 +1,4 @@
+[package]
+name = "std"
+description = "Standard library for Vid"
+version = "0.1.0"

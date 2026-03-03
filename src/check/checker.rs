@@ -68,6 +68,7 @@ fn type_checker() {
     "#);
     codebase.parse_all(ParseArgs {
         allow_non_definitions_at_root: true,
+        ..Default::default()
     });
 
     assert_eq!(

@@ -1,0 +1,7 @@
+
+clip main() {
+    let text = std::components::text("Hello, world!");
+    await 1s;
+    await text.scale_to(1.5, 2s);
+    await 2s;
+}

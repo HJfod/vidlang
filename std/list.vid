@@ -1,5 +1,5 @@
 
-intrinsic const function length(list: [Any]) -> int;
+intrinsic function length(list: [Any]) -> int;
 
-intrinsic const function add(list: [Any], item: (typeof list)::Item);
-intrinsic const function remove(list: [Any], item: (typeof list)::Item);
+intrinsic function add(list: [Any], item: (typeof list)::Item);
+intrinsic function remove(list: [Any], item: (typeof list)::Item);

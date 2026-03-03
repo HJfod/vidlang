@@ -310,6 +310,7 @@ fn ambiguous_exprs() {
         let (mut codebase, _) = Codebase::new_with_test_package("test_ambiguous_exprs", data);
         codebase.parse_all(ParseArgs {
             allow_non_definitions_at_root: true,
+            ..Default::default()
         });
         assert_eq!(
             codebase.messages.counts().0, 1,
@@ -334,6 +335,7 @@ fn binop() {
 
     codebase.parse_all(ParseArgs {
         allow_non_definitions_at_root: true,
+        ..Default::default()
     });
 
     assert_eq!(

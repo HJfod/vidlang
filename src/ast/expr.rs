@@ -17,6 +17,23 @@ pub struct Ident(pub NameId, pub Span);
 pub struct IdentPath(pub Vec<Ident>, pub Span);
 
 #[derive(Debug)]
+pub enum UsingIdentItem {
+    /// This path segment ends in a real item, like `std::ops::add`
+    Item(Ident),
+    /// This path segment ends in all items, like `std::ops::{...}`
+    AllItems,
+    /// This path segment ends in a list of further paths, like `std::{ops::add, sub}`
+    Items(Vec<UsingIdentPath>),
+}
+
+#[derive(Debug)]
+pub struct UsingIdentPath { 
+    pub parent: Vec<Ident>,
+    pub item: UsingIdentItem,
+    pub span: Span,
+}
+
+#[derive(Debug)]
 pub enum LogicChainType {
     And,
     Or,
@@ -83,6 +100,11 @@ pub enum Expr {
         visibility: Visibility,
         name: IdentPath,
         items: Vec<ExprId>,
+        span: Span,
+    },
+    Using {
+        visibility: Visibility,
+        path: UsingIdentPath,
         span: Span,
     },
 
@@ -157,6 +179,7 @@ impl Expr {
             Self::Function { body, .. } => sub_requires(*body),
             Self::ArrowFunction { body, .. } => sub_requires(*body),
             Self::Module { .. } => false,
+            Self::Using { .. } => true,
 
             Self::Call { .. } => true,
             Self::FieldAccess { .. } => true,
@@ -186,6 +209,7 @@ impl Expr {
             Self::Function { span, .. } => *span,
             Self::ArrowFunction { span, .. } => *span,
             Self::Module { span, .. } => *span,
+            Self::Using { span, .. } => *span,
             Self::Call { span, .. } => *span,
             Self::FieldAccess { span, .. } => *span,
             Self::Assign { span, .. } => *span,
@@ -210,6 +234,7 @@ impl Expr {
 pub struct ParseArgs {
     // Useful for tests
     pub allow_non_definitions_at_root: bool,
+    pub add_std_prelude_import: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -217,6 +242,7 @@ impl Default for ParseArgs {
     fn default() -> Self {
         Self {
             allow_non_definitions_at_root: false,
+            add_std_prelude_import: true,
         }
     }
 }
@@ -225,7 +251,24 @@ impl Default for ParseArgs {
 pub struct Ast(Vec<ExprId>);
 impl Ast {
     pub fn parse(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> Ast {
-        Ast(Expr::parse_semicolon_expr_list(tokens, codebase, !args.allow_non_definitions_at_root, args))
+        let first_span = tokens.last_span();
+        let mut exprs = Expr::parse_semicolon_expr_list(tokens, codebase, !args.allow_non_definitions_at_root, args);
+        
+        // Add import for `std::prelude::{ ... }`
+        if args.add_std_prelude_import {
+            exprs.insert(0, codebase.exprs.add(Expr::Using {
+                visibility: Visibility::Private,
+                path: UsingIdentPath {
+                    parent: ["std", "prelude"].into_iter()
+                        .map(|name| Ident(codebase.names.add(name), first_span))
+                        .collect(),
+                    item: UsingIdentItem::AllItems,
+                    span: first_span,
+                },
+                span: first_span,
+            }));
+        }
+        Ast(exprs)
     }
     pub fn exprs(&self) -> &[ExprId] {
         &self.0
@@ -238,6 +281,7 @@ fn invalid_parses() {
         let (mut codebase, id) = Codebase::new_with_test_package("invalid_parses", data);
         codebase.parse_all(ParseArgs {
             allow_non_definitions_at_root: true,
+            ..Default::default()
         });
         assert!(
             codebase.messages.counts().0 > 0,
@@ -265,7 +309,8 @@ fn parse() {
         }
     "#);
     codebase.parse_all(ParseArgs {
-        allow_non_definitions_at_root: true
+        allow_non_definitions_at_root: true,
+        ..Default::default()
     });
     assert_eq!(
         codebase.messages.count_total(), 0,

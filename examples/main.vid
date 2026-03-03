@@ -18,10 +18,10 @@ clip epic_rectangle(width: float, height: float) {
     await 5s;
 }
 
-function glow(target: Clip) {
+effect glow(target: Clip) {
 }
 
-function move(target: Clip, x: float, y: float, const time: duration) {
+effect move(target: Clip, x: float, y: float, const time: duration) {
     target.x.to(x, time);
     target.y.to(y, time);
     await time;

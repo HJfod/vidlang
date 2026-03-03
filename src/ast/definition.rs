@@ -183,7 +183,8 @@ fn parse_arrow_function() {
         let y = a => a;
     "#);
     codebase.parse_all(ParseArgs {
-        allow_non_definitions_at_root: true
+        allow_non_definitions_at_root: true,
+        ..Default::default()
     });
     assert_eq!(
         codebase.messages.count_total(), 0,

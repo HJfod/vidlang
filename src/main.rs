@@ -16,8 +16,8 @@ struct CliArgs {
 fn main() {
     let dir = std::env::current_dir().expect("Unable to get current directory");
     
-    let mut codebase = Codebase::new();
-    match codebase.modules.add_package("project".into(), &dir) {
+    let mut codebase = Codebase::new(&dir.join("std")).unwrap();
+    match codebase.modules.add_package("project".into(), &dir.join("examples")) {
         Ok(c) => c,
         Err(e) => match e {
             PackageAddError::UnableToReadFile(p, e) => panic!("unable to read file {}: {e}", p.display()),
