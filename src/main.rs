@@ -1,13 +1,18 @@
 #![feature(new_range_api)]
 
 use clap::Parser;
-use crate::{ast::expr::ParseArgs, pools::{codebase::Codebase, modules::PackageAddError}};
+use crate::{
+    ast::expr::ParseArgs, 
+    codebase::Codebase,
+    pools::modules::PackageAddError
+};
 
 mod ast;
 mod pools;
 mod tokens;
 mod utils;
 mod check;
+mod codebase;
 
 #[derive(Debug, Parser)]
 struct CliArgs {

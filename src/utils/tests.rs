@@ -3,7 +3,10 @@
 
 use crate::{
     ast::expr::{Expr, FunctionParam, FunctionParamKind, Ident, IdentPath, LogicChainType, StringComp, Visibility},
-    pools::{codebase::Codebase, exprs::ExprId, modules::Span, names::NameId}, tokens::token::Symbol};
+    pools::{exprs::ExprId, modules::Span, names::NameId},
+    tokens::token::Symbol,
+    codebase::Codebase
+};
 
 pub trait DebugAstEq {
     fn debug_ast_assert_eq(&self, other: &Self, codebase: &Codebase);

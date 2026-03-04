@@ -2,7 +2,8 @@ use std::fmt::Display;
 
 use crate::{
     ast::expr::Ident,
-    pools::{codebase::Codebase, messages::Message, modules::Span},
+    pools::{messages::Message, modules::Span},
+    codebase::Codebase,
     tokens::token::{BracketType, Symbol, Token},
     utils::lookahead_iter::Looakhead
 };
@@ -196,7 +197,7 @@ impl Iterator for Tokens {
 
 #[test]
 fn tokenizing() {
-    use crate::pools::codebase::Codebase;
+    use crate::codebase::Codebase;
     
     let (mut codebase, id) = Codebase::new_with_test_package("test_tokenizer", r#"
         let x += -5 + 2.3;

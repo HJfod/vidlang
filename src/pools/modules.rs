@@ -273,7 +273,7 @@ impl Span {
 
 #[test]
 fn src_iter() {
-    use crate::pools::codebase::Codebase;
+    use crate::codebase::Codebase;
     let (codebase, id) = Codebase::new_with_test_package("test_src_iter", "abcdefg");
     let mut iter = SrcIterator::new(id, codebase.modules.get(id).data.as_ref().unwrap().chars());
     for ch in 'a'..='g' {

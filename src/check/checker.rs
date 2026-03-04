@@ -1,6 +1,11 @@
 use std::collections::HashMap;
 
-use crate::{ast::expr::Expr, check::{ir::IrBlockId, ty::Item}, pools::{codebase::Codebase, items::ItemId, modules::ModId}};
+use crate::{
+    ast::expr::Expr,
+    check::{ir::IrBlockId, ty::Item},
+    pools::{items::ItemId, modules::ModId},
+    codebase::Codebase,
+};
 
 impl Expr {
     pub fn compile(&self, codebase: &mut Codebase) -> Option<IrBlockId> {
@@ -59,7 +64,6 @@ impl Checker {
 
 #[test]
 fn type_checker() {
-    use crate::pools::codebase::Codebase;
     use crate::ast::expr::ParseArgs;
 
     let (mut codebase, _) = Codebase::new_with_test_package("type_checker", r#"

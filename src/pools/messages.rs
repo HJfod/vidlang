@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use crate::pools::codebase::Codebase;
+use crate::codebase::Codebase;
 use crate::pools::modules::Span;
 
 #[derive(Debug)]

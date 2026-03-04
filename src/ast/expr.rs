@@ -1,6 +1,7 @@
 
 use crate::{
-    pools::{codebase::Codebase, exprs::ExprId, modules::Span, names::NameId}, 
+    pools::{exprs::ExprId, modules::Span, names::NameId}, 
+    codebase::Codebase,
     tokens::{token::{Duration, Symbol}, tokenstream::Tokens}
 };
 

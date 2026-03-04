@@ -1,7 +1,8 @@
 
 use crate::{
     ast::expr::{Expr, Ident, IdentPath, LogicChainType, ParseArgs},
-    pools::{codebase::Codebase, exprs::ExprId, messages::Message},
+    pools::{exprs::ExprId, messages::Message},
+    codebase::Codebase,
     tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 

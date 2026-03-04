@@ -307,7 +307,7 @@ impl Token {
 
 #[test]
 fn strings() {
-    use crate::pools::codebase::Codebase;
+    use crate::codebase::Codebase;
     use std::assert_matches;
 
     let (mut codebase, id) = Codebase::new_with_test_package("strings", r#"
@@ -340,7 +340,7 @@ fn strings() {
 
 #[test]
 fn tokenizer() {
-    use crate::pools::codebase::Codebase;
+    use crate::codebase::Codebase;
     let (mut codebase, id) = Codebase::new_with_test_package("test_tokenizer", r#"
         // This is a comment and it should not show up!
         let x += 5;
@@ -357,7 +357,7 @@ fn tokenizer() {
 
 #[test]
 fn units() {
-    use crate::pools::codebase::Codebase;
+    use crate::codebase::Codebase;
     let (mut codebase, id) = Codebase::new_with_test_package(
         "units",
         r#"
