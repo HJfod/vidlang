@@ -25,6 +25,9 @@ fn main() {
     match codebase.modules.add_package("project".into(), &dir.join("examples")) {
         Ok(c) => c,
         Err(e) => match e {
+            PackageAddError::NoVidToml => panic!("missing vid.toml"),
+            PackageAddError::UnableToReadVidToml(e) => panic!("can't read vid.toml: {e}"),
+            PackageAddError::BadVidToml(e) => panic!("bad vid.toml: {e}"),
             PackageAddError::UnableToReadFile(p, e) => panic!("unable to read file {}: {e}", p.display()),
             PackageAddError::UnableToReadDir(p, e) => panic!("unable to read directory {}: {e}", p.display()),
             PackageAddError::DuplicateNamedPackage(e) => panic!("multiple packages with the same name found: {e}"),

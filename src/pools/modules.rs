@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ffi::OsStr, fs::read_to_string, io::Error, path::{Path, PathBuf}, range::Range, str::Chars};
 
-use crate::utils::lookahead_iter::Looakhead;
+use crate::{codebase::config::VidToml, utils::lookahead_iter::Looakhead};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct ModId(usize);
@@ -13,18 +13,27 @@ pub struct SrcModule {
     pub submodules: HashMap<String, ModId>,
 }
 
+pub struct Package {
+    pub path: PathBuf,
+    pub config: VidToml,
+    pub root_id: ModId,
+}
+
 pub struct Modules {
     pool: Vec<SrcModule>,
     /// Packages are the root unit of codebases. Each program and library is 
     /// one package with a root module, which may contain any number of submodules
-    packages: HashMap<String, ModId>,
+    packages: HashMap<String, Package>,
 }
 
 #[derive(Debug)]
 pub enum PackageAddError {
     DuplicateNamedPackage(String),
-    UnableToReadDir(PathBuf, String),
-    UnableToReadFile(PathBuf, String),
+    NoVidToml,
+    UnableToReadVidToml(std::io::Error),
+    BadVidToml(toml::de::Error),
+    UnableToReadDir(PathBuf, std::io::Error),
+    UnableToReadFile(PathBuf, std::io::Error),
 }
 
 impl Modules {
@@ -40,6 +49,14 @@ impl Modules {
         if self.packages.contains_key(&name) {
             return Err(PackageAddError::DuplicateNamedPackage(name));
         }
+
+        let vid_toml_path = root_dir.join("vid.toml");
+        if !vid_toml_path.exists() {
+            return Err(PackageAddError::NoVidToml);
+        }
+
+        let vid_toml_data = read_to_string(vid_toml_path).map_err(PackageAddError::UnableToReadVidToml)?;
+        let config = toml::from_str(&vid_toml_data).map_err(PackageAddError::BadVidToml)?;
 
         // Otherwise add the root to the list of modules
         let root_id = self.add_module(SrcModule {
@@ -62,7 +79,11 @@ impl Modules {
         };
 
         // And then add the root module itself to the list of packages
-        self.packages.insert(name, root_id);
+        self.packages.insert(name, Package {
+            config,
+            root_id,
+            path: root_dir.to_path_buf(),
+        });
         Ok(root_id)
     }
 
@@ -75,7 +96,11 @@ impl Modules {
             parent: None,
             submodules: HashMap::new(),
         });
-        self.packages.insert(name.to_string(), id);
+        self.packages.insert(name.to_string(), Package { 
+            path: PathBuf::from(name),
+            config: VidToml::new_test(name),
+            root_id: id,
+        });
         id
     }
 
@@ -86,7 +111,7 @@ impl Modules {
     }
 
     fn discover_modules_in_dir(&mut self, parent_id: ModId, dir: &Path) -> Result<HashMap<String, ModId>, PackageAddError> {
-        let map_dir_err = |e: Error| PackageAddError::UnableToReadDir(dir.to_path_buf(), e.to_string());
+        let map_dir_err = |e: Error| PackageAddError::UnableToReadDir(dir.to_path_buf(), e);
 
         let mut modules = HashMap::<String, ModId>::new();
         for entry_res in dir.read_dir().map_err(map_dir_err)? {
@@ -146,7 +171,7 @@ impl Modules {
             }
             else {
                 let data = read_to_string(&path).map_err(
-                    |e| PackageAddError::UnableToReadFile(path, e.to_string())
+                    |e| PackageAddError::UnableToReadFile(path, e)
                 )?;
                 if self.get(sub_mod_id).data.is_some() {
                     panic!(
@@ -168,11 +193,11 @@ impl Modules {
         std::range::Range::from(0..self.pool.len()).into_iter().map(ModId)
     }
     pub fn packages(&self) -> impl Iterator<Item = (&str, ModId)> {
-        self.packages.iter().map(|p| (p.0.as_str(), *p.1))
+        self.packages.iter().map(|p| (p.0.as_str(), p.1.root_id))
     }
 
     pub fn get_package_root(&self, name: &str) -> Option<ModId> {
-        self.packages.get(name).copied()
+        self.packages.get(name).map(|p| p.root_id)
     }
     pub fn get_submodules_for(&self, id: ModId) -> impl Iterator<Item = (&str, ModId)> {
         self.get(id).submodules.iter().map(|p| (p.0.as_str(), *p.1))
@@ -287,6 +312,13 @@ fn create_codebase() {
     use tempfile::tempdir;
 
     let dir = tempdir().unwrap();
+
+    // Directory must have a vid.toml file
+    std::fs::write(dir.path().join("vid.toml"), r#"
+        [project]
+        name = "create_codebase_test"
+    "#).unwrap();
+    
     std::fs::write(dir.path().join("main.vid"), "").unwrap();
 
     // This one should be ignored

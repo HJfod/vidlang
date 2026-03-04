@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use semver::Version;
 
 fn default_aspect_ratio() -> String {
@@ -10,11 +12,11 @@ fn default_aspect_ratio() -> String {
 #[derive(serde::Deserialize)]
 pub struct DefProject {
     /// Project name. Must be a valid identifier, like `my_awesome_video`
-    name: String,
+    pub name: String,
     /// Aspect ratio for the project. Should be in the format `4:3`. Defaults to 
     /// `16:9`
     #[serde(default = "default_aspect_ratio")]
-    aspect_ratio: String,
+    pub aspect_ratio: String,
 }
 
 /// Defines that this Vid module is a package aka library. In other words, it 
@@ -23,32 +25,43 @@ pub struct DefProject {
 #[derive(serde::Deserialize)]
 pub struct DefPackage {
     /// Package name. Must be a valid identifier, like `std` or `my_video_tools`
-    name: String,
+    pub name: String,
     /// Package description
-    description: String,
+    pub description: String,
     /// Package version. This should follow the [RomVer](https://romversioning.github.io/romver/) 
     /// standard
-    version: Version,
+    pub version: Version,
     /// URL to a GitHub repository or equivalent place where the source code 
     /// and/or docs and/or homepage for this package can be found
-    repository: Option<String>,
+    pub repository: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
+#[allow(non_camel_case_types)]
 pub enum VidType {
     project(DefProject),
     package(DefPackage),
 }
 
 #[derive(serde::Deserialize)]
-pub struct UsePackage {
-    
-}
-
-#[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VidToml {
     #[serde(flatten)]
-    ty: VidType,
-    packages: 
+    pub ty: VidType,
+    #[serde(default)]
+    pub packages: HashMap<String, String>,
+}
+
+impl VidToml {
+    #[cfg(test)]
+    pub fn new_test(name: &str) -> Self {
+        Self {
+            ty: VidType::project(DefProject {
+                name: name.to_string(),
+                aspect_ratio: default_aspect_ratio()
+            }),
+            // todo: add std package here
+            packages: Default::default(),
+        }
+    }
 }
