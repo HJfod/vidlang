@@ -1,9 +1,10 @@
 use std::{collections::HashMap, ffi::OsStr, fs::read_to_string, io::Error, path::{Path, PathBuf}, range::Range, str::Chars};
 
-use crate::{codebase::config::VidToml, utils::lookahead_iter::Looakhead};
+use slotmap::{SlotMap, new_key_type};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct ModId(usize);
+use crate::utils::lookahead_iter::Looakhead;
+
+new_key_type! { pub struct ModId; }
 
 pub struct SrcModule {
     pub path: PathBuf,
@@ -13,38 +14,22 @@ pub struct SrcModule {
     pub submodules: HashMap<String, ModId>,
 }
 
-pub struct Package {
-    pub path: PathBuf,
-    pub config: VidToml,
-    pub root_id: ModId,
-}
-
 pub struct Modules {
-    pool: Vec<SrcModule>,
-    /// Packages are the root unit of codebases. Each program and library is 
-    /// one package with a root module, which may contain any number of submodules
-    packages: HashMap<String, Package>,
+    pool: SlotMap<ModId, SrcModule>,
 }
 
 #[derive(Debug)]
-pub enum PackageAddError {
-    DuplicateNamedPackage(String),
-    NoVidToml,
-    UnableToReadVidToml(std::io::Error),
-    BadVidToml(toml::de::Error),
+pub enum ModuleAddError {
     UnableToReadDir(PathBuf, std::io::Error),
     UnableToReadFile(PathBuf, std::io::Error),
 }
 
 impl Modules {
     pub fn new() -> Self {
-        Self {
-            pool: Default::default(),
-            packages: Default::default(),
-        }
+        Self { pool: Default::default() }
     }
 
-    pub fn add_package(&mut self, name: String, root_dir: &Path) -> Result<ModId, PackageAddError> {
+    pub fn add_package(&mut self, name: String, root_dir: &Path) -> Result<ModId, ModuleAddError> {
         // Check if a package with this name already exists
         if self.packages.contains_key(&name) {
             return Err(PackageAddError::DuplicateNamedPackage(name));

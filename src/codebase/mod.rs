@@ -4,13 +4,21 @@ use std::{collections::HashMap, path::{Path, PathBuf}};
 
 use crate::{
     ast::expr::{Ast, ParseArgs},
-    pools::{exprs::Exprs, items::Items, messages::Messages, modules::{ModId, Modules, PackageAddError, Span, SrcIterator}, names::Names},
+    codebase::config::VidToml,
+    pools::{exprs::Exprs, items::Items, messages::Messages, modules::{ModId, ModuleAddError, Modules, Span, SrcIterator}, names::Names},
     tokens::{token::Token, tokenstream::Tokens}
 };
 
+/// Packages are the root unit of codebases. Each project and library is 
+/// one package with a root module, which may contain any number of submodules
+pub struct Package {
+    pub path: PathBuf,
+    pub config: VidToml,
+    pub root_id: ModId,
+}
+
 pub struct Codebase {
-    pub std_path: PathBuf,
-    pub std_mod_id: ModId,
+    pub packages: HashMap<String, Package>,
     pub modules: Modules,
     pub names: Names,
     pub messages: Messages,
@@ -20,12 +28,36 @@ pub struct Codebase {
 }
 
 #[derive(Debug)]
-pub enum CodebaseCreateError {
-    InvalidStdPath,
-    InvalidStd(PackageAddError),
+pub enum AddPackageError {
+    NoVidToml,
+    CantReadVidToml(std::io::Error),
+    BadVidToml(toml::de::Error),
+    DuplicateName(String),
+    ModuleError(ModuleAddError),
 }
 
 impl Codebase {
+    pub fn new() -> Self {
+        Self {
+            packages: Default::default(),
+            modules: Modules::new(),
+            names: Names::new(),
+            messages: Messages::new(),
+            exprs: Exprs::new(),
+            items: Items::new(),
+            parsed_asts: HashMap::new()
+        }
+    }
+    #[cfg(test)]
+    pub fn new_with_test_package(name: &str, data: &str) -> (Self, ModId) {
+        let mut ret = Self::new(&std::env::current_dir().unwrap().join("std")).unwrap();
+        let id = ret.modules.add_test_package(name, data);
+        (ret, id)
+    }
+
+    pub fn add_package(path: &Path) -> Result<String, AddPackageError> {
+    }
+
     pub fn new(std_path: &Path) -> Result<Self, CodebaseCreateError> {
         // Do a preliminary check that at least the `prelude` component of `std` exists
         if !std_path.exists() || !std_path.is_dir() || !std_path.join("prelude.vid").exists() {
@@ -46,12 +78,6 @@ impl Codebase {
             items: Items::new(),
             parsed_asts: HashMap::new()
         })
-    }
-    #[cfg(test)]
-    pub fn new_with_test_package(name: &str, data: &str) -> (Self, ModId) {
-        let mut ret = Self::new(&std::env::current_dir().unwrap().join("std")).unwrap();
-        let id = ret.modules.add_test_package(name, data);
-        (ret, id)
     }
 
     pub fn tokenize_mod(&mut self, mod_id: ModId) -> Option<Tokens> {
