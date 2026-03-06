@@ -168,4 +168,8 @@ fn create_codebase() {
     let shadow_subs = codebase.modules.get_submodules_for(shadow_id).collect::<Vec<_>>();
     assert_eq!(shadow_subs.len(), 1);
     assert_eq!(shadow_subs[0].0, "another");
+
+    assert_eq!(codebase.modules.get_full_mod_name(pkg_id), "create_codebase_test");
+    assert_eq!(codebase.modules.get_full_mod_name(shadow_id), "create_codebase_test::shadow");
+    assert_eq!(codebase.modules.get_full_mod_name(shadow_subs[0].1), "create_codebase_test::shadow::another");
 }
