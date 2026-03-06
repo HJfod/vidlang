@@ -148,6 +148,7 @@ pub enum Token {
     // Integer literals don't take into account the '-' ever, so we can parse 
     // into an u64 instead for more precision
     Int(u64, Span),
+    // todo: might actually want to make percentages a distinct type from floats
     Float(f64, FloatLitType, Span),
     Duration(Duration, Span),
     String(Vec<StrLitComp>, Span),
