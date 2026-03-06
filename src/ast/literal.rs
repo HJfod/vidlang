@@ -83,10 +83,10 @@ impl Expr {
             return codebase.exprs.add(Expr::Int(num, span));
         }
         if tokens.peek_float(codebase) {
-            let Token::Float(num, span) = tokens.expect_float(codebase) else {
+            let Token::Float(num, ty, span) = tokens.expect_float(codebase) else {
                 unreachable!("tokens.peek_float() returned true but expect_float() did not return a float");
             };
-            return codebase.exprs.add(Expr::Float(num, span));
+            return codebase.exprs.add(Expr::Float(num, ty, span));
         }
         if tokens.peek_duration(codebase) {
             let Token::Duration(num, span) = tokens.expect_duration(codebase) else {

@@ -47,12 +47,13 @@ impl BracketType {
 #[strum(serialize_all="snake_case")]
 pub enum Symbol {
     // Keywords
-    Let, Const, Type, Function, Clip, Trait, Impl, Struct, Module, Unit,
-    Private, Public, Ref,
-    Anytype,
+    Let, Const, Type, Function, Effect, Clip, Module,
+    Trait, Impl, Struct, Unit,
+    Intrinsic, Using, Private, Public, Ref,
+    Typeof,
     Match, If, Then, Else, While, For, In, Loop, Await, Return, Yield,
     And, Or,
-    True, False,
+    True, False, None,
     Macro, Codegen,
     // Operators
     #[strum(to_string="=")]
@@ -105,13 +106,17 @@ pub enum Symbol {
     Semicolon,
     #[strum(to_string="!")]
     Exclamation,
+    #[strum(to_string="?")]
+    Question,
 }
 
 impl Symbol {
     pub fn is_reserved(self) -> bool {
         matches!(self,
             // maybe add support for custom units (px, %, etc.) in the future
-            Symbol::Unit | 
+            Symbol::Unit |
+            // might want to have an explicit struct keyword
+            Symbol::Struct |
             // add support for macros in the future
             Symbol::Macro | Symbol::Codegen | 
             // mayber add support for traits in the future (if I decide to add generics aswell)
@@ -132,12 +137,18 @@ pub enum Duration {
     Frames(u64),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FloatLitType {
+    Number,
+    Percentage,
+}
+
 #[derive(Debug)]
 pub enum Token {
     // Integer literals don't take into account the '-' ever, so we can parse 
     // into an u64 instead for more precision
     Int(u64, Span),
-    Float(f64, Span),
+    Float(f64, FloatLitType, Span),
     Duration(Duration, Span),
     String(Vec<StrLitComp>, Span),
     Ident(NameId, Span),
@@ -150,7 +161,7 @@ impl Token {
     pub fn span(&self) -> Span {
         match self {
             Self::Int(_, span) => *span,
-            Self::Float(_, span) => *span,
+            Self::Float(_, _, span) => *span,
             Self::Duration(_, span) => *span,
             Self::String(_, span) => *span,
             Self::Ident(_, span) => *span,

@@ -1,8 +1,6 @@
 
 use crate::{
-    pools::{exprs::ExprId, modules::Span, names::NameId}, 
-    codebase::Codebase,
-    tokens::{token::{Duration, Symbol}, tokenstream::Tokens}
+    codebase::Codebase, pools::{exprs::ExprId, modules::Span, names::NameId}, tokens::{token::{Duration, FloatLitType, Symbol}, tokenstream::Tokens}
 };
 
 #[derive(Debug)]
@@ -68,7 +66,7 @@ pub enum Visibility {
 pub enum Expr {
     Bool(bool, Span),
     Int(u64, Span),
-    Float(f64, Span),
+    Float(f64, FloatLitType, Span),
     Duration(Duration, Span),
     String(Vec<StringComp>, Span),
     Ident(IdentPath),
@@ -202,7 +200,7 @@ impl Expr {
         match self {
             Self::Bool(_, span) => *span,
             Self::Int(_, span) => *span,
-            Self::Float(_, span) => *span,
+            Self::Float(_, _, span) => *span,
             Self::Duration(_, span) => *span,
             Self::String(_, span) => *span,
             Self::Ident(ident) => ident.1,

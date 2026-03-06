@@ -15,7 +15,7 @@
 // Have easing functions take ownership of the Durational, warn if you pass in 
 // a Clip because that's probably not intentional
 
-private effect apply_easing(target: Durational, algo: (float) => float) {
+private effect apply_easing(target: Effect, algo: (float) => float) {
     // todo: warn if `target` is a `Clip`
     if target.DURATION > 0 {
         // Normalize variable to go from 0 to 1
@@ -24,12 +24,12 @@ private effect apply_easing(target: Durational, algo: (float) => float) {
     await target;
 }
 
-effect sine_in_out(target: Durational) {
+effect sine_in_out(target: Effect) {
     await target.apply_easing(x => -(std::math::cos(x * std::math::constants::PI) - 1) / 2);
 }
-effect sine_in(target: Durational) {
+effect sine_in(target: Effect) {
     await target.apply_easing(x => 1 - std::math::cos((x * std::math::constants::PI) / 2));
 }
-effect sine_out(target: Durational) {
+effect sine_out(target: Effect) {
     await target.apply_easing(x => std::math::sin((x * std::math::constants::PI) / 2));
 }

@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use crate::{pools::{
     messages::{Message, Messages}, modules::{Span, SrcIterator}, names::Names
-}, tokens::{token::{BracketType, Duration, StrLitComp, Symbol, Token}, tokenstream::Tokens}};
+}, tokens::{token::{BracketType, Duration, FloatLitType, StrLitComp, Symbol, Token}, tokenstream::Tokens}};
 use unicode_xid::UnicodeXID;
 
 impl Token {
@@ -139,6 +139,7 @@ impl Token {
                 num_str.push_str(&iter.next_while(|c| c.is_ascii_digit()));
             }
             let num_span = iter.span_from(start);
+
             let maybe_unit = Self::peek_and_next_ident(iter);
 
             // Some helpers
@@ -157,8 +158,13 @@ impl Token {
                 }
             };
 
+            // Allow writing numbers as percentages
+            if maybe_unit.is_none() && iter.peek() == Some('%') {
+                iter.next();
+                return Some(Token::Float(parse_as_f64(messages) / 100.0, FloatLitType::Percentage, iter.span_from(start)));
+            }
             // Units
-            if let Some((unit, unit_span)) = maybe_unit {
+            else if let Some((unit, unit_span)) = maybe_unit {
                 let require_as_u64 = |messages: &mut Messages| if num_str.contains('.') {
                     messages.add(Message::new_error(
                         format!("unit {unit} may only be specified on integers"),
@@ -181,7 +187,7 @@ impl Token {
             }
             // Otherwise parse float if the token was one
             if num_str.contains('.') {
-                return Some(Token::Float(parse_as_f64(messages), num_span))
+                return Some(Token::Float(parse_as_f64(messages), FloatLitType::Number, num_span))
             }
             // Otherwise this is an integer
             return Some(Token::Int(parse_as_u64(messages), num_span));
@@ -363,6 +369,7 @@ fn units() {
         r#"
             5s 60.6ms 17frames
             10.2frames 20unknown
+            50% 602.5%
         "#
     );
     let mut tokens = codebase.tokenize_mod(id).unwrap();
@@ -371,5 +378,7 @@ fn units() {
     assert!(matches!(tokens.next(), Some(Token::Duration(Duration::Frames(17), _))));
     assert!(matches!(tokens.next(), Some(Token::Duration(_, _))));
     assert!(matches!(tokens.next(), Some(Token::Duration(_, _))));
+    assert!(matches!(tokens.next(), Some(Token::Float(0.5, FloatLitType::Percentage, _))));
+    assert!(matches!(tokens.next(), Some(Token::Float(6.025, FloatLitType::Percentage, _))));
     assert!(codebase.messages.count_total() == 2, "{:?}", codebase.messages);
 }

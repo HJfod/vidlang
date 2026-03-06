@@ -2,7 +2,7 @@ use crate::{
     ast::expr::{Expr, ParseArgs},
     pools::exprs::ExprId,
     codebase::Codebase,
-    tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
+    tokens::{token::{BracketType, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
@@ -16,11 +16,6 @@ impl Expr {
                 _ => codebase.exprs.add(Expr::Ident(codebase.names.missing_path(tokens.span_from(start)))),
             };
             return codebase.exprs.add(Expr::TyArray { inner, span: tokens.span_from(start) });
-        }
-
-        // Anytype (special thing for specific overloads)
-        if tokens.peek_and_expect_symbol(Symbol::Anytype, codebase) {
-            return codebase.exprs.add(Expr::TyAny(tokens.span_from(start)));
         }
 
         // Normal named type

@@ -2,10 +2,7 @@
 #![cfg(test)]
 
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, Ident, IdentPath, LogicChainType, StringComp, Visibility},
-    pools::{exprs::ExprId, modules::Span, names::NameId},
-    tokens::token::Symbol,
-    codebase::Codebase
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, Ident, IdentPath, LogicChainType, StringComp, Visibility}, codebase::Codebase, pools::{exprs::ExprId, modules::Span, names::NameId}, tokens::token::{FloatLitType, Symbol}
 };
 
 pub trait DebugAstEq {
@@ -98,6 +95,11 @@ impl DebugAstEq for IdentPath {
         self.0.debug_ast_assert_eq(&other.0, codebase);
     }
 }
+impl DebugAstEq for FloatLitType {
+    fn debug_ast_assert_eq(&self, other: &Self, _codebase: &Codebase) {
+        assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
+    }
+}
 impl DebugAstEq for Visibility {
     fn debug_ast_assert_eq(&self, other: &Self, _codebase: &Codebase) {
         assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
@@ -138,7 +140,10 @@ impl DebugAstEq for Expr {
         match (self, other) {
             (Expr::Bool(a, _), Expr::Bool(b, _)) => a.debug_ast_assert_eq(b, codebase),
             (Expr::Int(a, _), Expr::Int(b, _)) => a.debug_ast_assert_eq(b, codebase),
-            (Expr::Float(a, _), Expr::Float(b, _)) => a.debug_ast_assert_eq(b, codebase),
+            (Expr::Float(a, at, _), Expr::Float(b, bt, _)) => {
+                a.debug_ast_assert_eq(b, codebase);
+                at.debug_ast_assert_eq(bt, codebase);
+            }
             (Expr::String(a, _), Expr::String(b, _)) => a.debug_ast_assert_eq(b, codebase),
             (Expr::Ident(a), Expr::Ident(b)) => a.debug_ast_assert_eq(b, codebase),
 
