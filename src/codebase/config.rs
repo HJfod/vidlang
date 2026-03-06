@@ -64,4 +64,11 @@ impl VidToml {
             packages: Default::default(),
         }
     }
+
+    pub fn name(&self) -> &str {
+        match &self.ty {
+            VidType::project(p) => &p.name,
+            VidType::package(p) => &p.name,
+        }
+    }
 }

@@ -1,10 +1,11 @@
 #![feature(new_range_api)]
 
+use std::path::Path;
+
 use clap::Parser;
 use crate::{
     ast::expr::ParseArgs, 
-    codebase::Codebase,
-    pools::modules::PackageAddError
+    codebase::{AddPackageError, Codebase}, pools::modules::AddModuleError,
 };
 
 mod ast;
@@ -18,21 +19,28 @@ mod codebase;
 struct CliArgs {
 }
 
+fn add_pkg_or_panic(codebase: &mut Codebase, path: &Path) {
+    match codebase.add_package(path) {
+        Ok(_) => (),
+        Err(e) => match e {
+            AddPackageError::NoVidToml => panic!("{}: missing vid.toml", path.display()),
+            AddPackageError::CantReadVidToml(e) => panic!("{}: can't read vid.toml: {e}", path.display()),
+            AddPackageError::BadVidToml(e) => panic!("{}: bad vid.toml: {e}", path.display()),
+            AddPackageError::DuplicateName(e) => panic!("{}: multiple packages with the same name found: {e}", path.display()),
+            AddPackageError::ModuleError(e) => match e {
+                AddModuleError::UnableToReadFile(p, e) => panic!("unable to read file {}: {e}", p.display()),
+                AddModuleError::UnableToReadDir(p, e) => panic!("unable to read directory {}: {e}", p.display()),
+            }
+        }
+    }
+}
+
 fn main() {
     let dir = std::env::current_dir().expect("Unable to get current directory");
     
-    let mut codebase = Codebase::new(&dir.join("std")).unwrap();
-    match codebase.modules.add_package("project".into(), &dir.join("examples")) {
-        Ok(c) => c,
-        Err(e) => match e {
-            PackageAddError::NoVidToml => panic!("missing vid.toml"),
-            PackageAddError::UnableToReadVidToml(e) => panic!("can't read vid.toml: {e}"),
-            PackageAddError::BadVidToml(e) => panic!("bad vid.toml: {e}"),
-            PackageAddError::UnableToReadFile(p, e) => panic!("unable to read file {}: {e}", p.display()),
-            PackageAddError::UnableToReadDir(p, e) => panic!("unable to read directory {}: {e}", p.display()),
-            PackageAddError::DuplicateNamedPackage(e) => panic!("multiple packages with the same name found: {e}"),
-        }
-    };
+    let mut codebase = Codebase::new();
+    add_pkg_or_panic(&mut codebase, &dir.join("std"));
+    add_pkg_or_panic(&mut codebase, &dir.join("examples"));
     codebase.parse_all(ParseArgs::default());
 
     codebase.messages.release(&codebase, |msg| println!("{}", msg));

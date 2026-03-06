@@ -19,9 +19,9 @@ pub struct Checker {
 
 impl Checker {
     pub fn new(codebase: &mut Codebase) -> Self {
-        let pkgs = codebase.modules.packages()
+        let pkgs = codebase.packages.iter()
                 // Because we can't have multiple borrows into Codebase...
-                .map(|p| (p.0.to_owned(), p.1))
+                .map(|p| (p.0.to_owned(), p.1.root_id))
                 .collect::<Vec<_>>().into_iter();
         Self {
             package_roots: pkgs
