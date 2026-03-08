@@ -4,26 +4,54 @@ module constants {
     const E: float = 2.718281828459045;
 }
 
-intrinsic function abs(value: int) -> int;
-intrinsic function abs(value: float) -> float;
+function abs(value: int) -> int {
+    invoke_intrinsic int_abs(value)
+}
+function abs(value: float) -> float {
+    invoke_intrinsic float_abs(value)
+}
 
-intrinsic function sqrt(value: float) -> float;
+function sqrt(value: float) -> float {
+    invoke_intrinsic float_sqrt(value)
+}
 
-intrinsic function sin(value: float) -> float;
-intrinsic function cos(value: float) -> float;
-intrinsic function tan(value: float) -> float;
+function sin(value: float) -> float {
+    invoke_intrinsic float_sin(value)
+}
+function cos(value: float) -> float {
+    invoke_intrinsic float_cos(value)
+}
+function tan(value: float) -> float {
+    invoke_intrinsic float_tan(value)
+}
 
-intrinsic function asin(value: float) -> float;
-intrinsic function acos(value: float) -> float;
-intrinsic function atan(value: float) -> float;
-intrinsic function atan2(x: float, y: float) -> float;
+function asin(value: float) -> float {
+    invoke_intrinsic float_asin(value)
+}
+function acos(value: float) -> float {
+    invoke_intrinsic float_acos(value)
+}
+function atan(value: float) -> float {
+    invoke_intrinsic float_atan(value)
+}
+function atan2(x: float, y: float) -> float {
+    invoke_intrinsic float_atan2(x, y)
+}
 
 // Returns the natural logarithm of the value
-intrinsic function log(value: float) -> float;
+function log(value: float) -> float {
+    invoke_intrinsic float_log(value)
+}
 
-intrinsic function round(value: float) -> int;
-intrinsic function ceil(value: float) -> int;
-intrinsic function floor(value: float) -> int;
+function round(value: float) -> int {
+    invoke_intrinsic float_round(value)
+}
+function ceil(value: float) -> int {
+    invoke_intrinsic float_ceil(value)
+}
+function floor(value: float) -> int {
+    invoke_intrinsic float_floor(value)
+}
 
 function clamp(value: float, min: float, max: float) -> float {
     if value < min {

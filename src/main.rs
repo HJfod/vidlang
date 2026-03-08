@@ -47,3 +47,15 @@ fn main() {
     let (errors, warnings) = codebase.messages.counts();
     println!("Finished with {errors} errors and {warnings} warnings");
 }
+
+#[test]
+fn compile_examples() {
+    let dir = std::env::current_dir().expect("Unable to get current directory");
+    
+    let mut codebase = Codebase::new();
+    add_pkg_or_panic(&mut codebase, &dir.join("std"));
+    add_pkg_or_panic(&mut codebase, &dir.join("examples"));
+    codebase.parse_all(ParseArgs::default());
+
+    assert!(codebase.messages.count_total() == 0, "{:?}", codebase.messages);
+}

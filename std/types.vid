@@ -1,11 +1,11 @@
 
 // Every type satisfies Any
-intrinsic type Any;
+type Any = __intrinsic_any_type;
 
 // Special duration that lasts forever
 // Awaiting this duration is illegal, since it would make the video last 
 // literally forever
-intrinsic const forever: duration;
+const forever: duration = invoke_intrinsic forever_duration();
 
 type Durational = {
     const DURATION: duration;

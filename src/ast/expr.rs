@@ -1,6 +1,6 @@
 
 use crate::{
-    codebase::Codebase, pools::{exprs::ExprId, modules::Span, names::NameId}, tokens::{token::{Duration, FloatLitType, Symbol}, tokenstream::Tokens}
+    ast::intrinsics::Intrinsic, codebase::{self, Codebase}, pools::{exprs::ExprId, modules::Span, names::NameId}, tokens::{token::{Duration, FloatLitType, Symbol}, tokenstream::Tokens}
 };
 
 #[derive(Debug)]
@@ -15,19 +15,26 @@ pub struct Ident(pub NameId, pub Span);
 #[derive(Debug)]
 pub struct IdentPath(pub Vec<Ident>, pub Span);
 
+impl IdentPath {
+    pub fn from_components(comps: &[&str], span: Span, codebase: &mut Codebase) -> IdentPath {
+        IdentPath(
+            comps.iter().map(|s| Ident(codebase.names.add(s), span)).collect(),
+            span
+        )
+    }
+}
+
 #[derive(Debug)]
 pub enum UsingIdentItem {
-    /// This path segment ends in a real item, like `std::ops::add`
-    Item(Ident),
     /// This path segment ends in all items, like `std::ops::{...}`
     AllItems,
-    /// This path segment ends in a list of further paths, like `std::{ops::add, sub}`
-    Items(Vec<UsingIdentPath>),
+    /// This path segment ends in a list of specific items, like `std::ops::{add, sub}`
+    Items(Vec<Ident>),
 }
 
 #[derive(Debug)]
 pub struct UsingIdentPath { 
-    pub parent: Vec<Ident>,
+    pub parent: IdentPath,
     pub item: UsingIdentItem,
     pub span: Span,
 }
@@ -63,6 +70,22 @@ pub enum Visibility {
 }
 
 #[derive(Debug)]
+pub enum FunctionType {
+    Function,
+    Effect,
+    Clip,
+}
+
+#[derive(Debug)]
+pub enum StructTypeField {
+    /// Field with a type
+    Field(Ident, ExprId),
+    /// Only one of these fields may be active at a time. If type is omitted, 
+    /// then the field receives an unique type
+    Enum(Vec<(Ident, Option<ExprId>)>),
+}
+
+#[derive(Debug)]
 pub enum Expr {
     Bool(bool, Span),
     Int(u64, Span),
@@ -82,11 +105,11 @@ pub enum Expr {
     },
     Function {
         visibility: Visibility,
+        ty: FunctionType,
         name: IdentPath,
         params: Vec<FunctionParam>,
         return_ty: Option<ExprId>,
         body: ExprId,
-        is_clip: bool,
         is_const: bool,
         span: Span,
     },
@@ -106,12 +129,23 @@ pub enum Expr {
         path: UsingIdentPath,
         span: Span,
     },
+    TypeDef {
+        visibility: Visibility,
+        name: IdentPath,
+        ty: ExprId,
+        span: Span,
+    },
 
     // `a(b, c: 5)`
     Call {
         target: ExprId,
         args: Vec<(Option<Ident>, ExprId)>,
         op: Option<(Symbol, Span)>,
+        span: Span,
+    },
+    InvokeIntrinsic {
+        intrinsic: Intrinsic,
+        args: Vec<ExprId>,
         span: Span,
     },
     // `a.b`
@@ -148,12 +182,33 @@ pub enum Expr {
     Await(ExprId, Span),
 
     TyNamed {
-        name: IdentPath,
+        name: Ident,
         span: Span,
     },
-    TyAny(Span),
+    TyAccess {
+        from: ExprId,
+        item: IdentPath,
+        span: Span,
+    },
+    TyFunction {
+        params: Vec<ExprId>,
+        return_ty: ExprId,
+        span: Span,
+    },
     TyArray {
         inner: ExprId,
+        span: Span,
+    },
+    TyObject {
+        fields: Vec<StructTypeField>,
+        span: Span,
+    },
+    TyOptional {
+        inner: ExprId,
+        span: Span,
+    },
+    TypeOf {
+        eval: ExprId,
         span: Span,
     },
 }
@@ -179,8 +234,10 @@ impl Expr {
             Self::ArrowFunction { body, .. } => sub_requires(*body),
             Self::Module { .. } => false,
             Self::Using { .. } => true,
+            Self::TypeDef { ty, .. } => sub_requires(*ty),
 
             Self::Call { .. } => true,
+            Self::InvokeIntrinsic { .. } => true,
             Self::FieldAccess { .. } => true,
             Self::Assign { .. } => true,
             Self::LogicChain { .. } => true,
@@ -192,8 +249,12 @@ impl Expr {
             Self::Await(value, _) => sub_requires(*value),
 
             Self::TyNamed { .. } => true,
-            Self::TyAny(..) => true,
+            Self::TyAccess { .. } => true,
+            Self::TyFunction { .. } => true,
             Self::TyArray { .. } => true,
+            Self::TyObject { .. } => false,
+            Self::TyOptional { .. } => true,
+            Self::TypeOf { .. } => true,
         }
     }
     pub fn span(&self) -> Span {
@@ -209,7 +270,9 @@ impl Expr {
             Self::ArrowFunction { span, .. } => *span,
             Self::Module { span, .. } => *span,
             Self::Using { span, .. } => *span,
+            Self::TypeDef { span, .. } => *span,
             Self::Call { span, .. } => *span,
+            Self::InvokeIntrinsic { span, .. } => *span,
             Self::FieldAccess { span, .. } => *span,
             Self::Assign { span, .. } => *span,
             Self::LogicChain { span, .. } => *span,
@@ -219,8 +282,12 @@ impl Expr {
             Self::Block(_, span) => *span,
             Self::Await(_, span) => *span,
             Self::TyNamed { span, .. } => *span,
-            Self::TyAny(span) => *span,
+            Self::TyAccess { span, .. } => *span,
+            Self::TyFunction { span, .. } => *span,
             Self::TyArray { span, .. } => *span,
+            Self::TyObject { span, .. } => *span,
+            Self::TyOptional { span, .. } => *span,
+            Self::TypeOf { span, .. } => *span,
         }
     }
     #[cfg(test)]
@@ -255,12 +322,11 @@ impl Ast {
         
         // Add import for `std::prelude::{ ... }`
         if args.add_std_prelude_import {
+            let import_path = IdentPath::from_components(&["std", "prelude"], first_span, codebase);
             exprs.insert(0, codebase.exprs.add(Expr::Using {
                 visibility: Visibility::Private,
                 path: UsingIdentPath {
-                    parent: ["std", "prelude"].into_iter()
-                        .map(|name| Ident(codebase.names.add(name), first_span))
-                        .collect(),
+                    parent: import_path,
                     item: UsingIdentItem::AllItems,
                     span: first_span,
                 },

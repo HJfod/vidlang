@@ -1,9 +1,21 @@
 
-intrinsic function length(str: string) -> int;
+function length(str: string) -> int {
+    invoke_intrinsic string_length(str)
+}
 
-intrinsic function parse_int(str: string) -> int;
-intrinsic function parse_float(str: string) -> int;
+function parse_int(str: string) -> int {
+    invoke_intrinsic string_to_int(str)
+}
+function parse_float(str: string) -> int {
+    invoke_intrinsic string_to_float(str)
+}
 
-intrinsic function to_lowercase(str: string) -> string;
-intrinsic function to_uppercase(str: string) -> string;
-intrinsic function strip(str: string) -> string;
+function to_lowercase(str: string) -> string {
+    invoke_intrinsic string_to_lowercase(str)
+}
+function to_uppercase(str: string) -> string {
+    invoke_intrinsic string_to_uppercase(str)
+}
+function strip(str: string) -> string {
+    invoke_intrinsic string_strip(str)
+}

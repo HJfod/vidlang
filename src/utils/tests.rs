@@ -2,7 +2,7 @@
 #![cfg(test)]
 
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, Ident, IdentPath, LogicChainType, StringComp, Visibility}, codebase::Codebase, pools::{exprs::ExprId, modules::Span, names::NameId}, tokens::token::{FloatLitType, Symbol}
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, FunctionType, Ident, IdentPath, LogicChainType, StringComp, Visibility}, codebase::Codebase, pools::{exprs::ExprId, modules::Span, names::NameId}, tokens::token::{FloatLitType, Symbol}
 };
 
 pub trait DebugAstEq {
@@ -100,6 +100,11 @@ impl DebugAstEq for FloatLitType {
         assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
     }
 }
+impl DebugAstEq for FunctionType {
+    fn debug_ast_assert_eq(&self, other: &Self, _codebase: &Codebase) {
+        assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
+    }
+}
 impl DebugAstEq for Visibility {
     fn debug_ast_assert_eq(&self, other: &Self, _codebase: &Codebase) {
         assert_eq!(std::mem::discriminant(self), std::mem::discriminant(other));
@@ -174,21 +179,21 @@ impl DebugAstEq for Expr {
             (
                 Expr::Function {
                     visibility: a_visibility,
+                    ty: a_ty,
                     name: a_name,
                     params: a_params,
                     return_ty: a_return_ty,
                     body: a_body,
-                    is_clip: a_is_clip,
                     is_const: a_is_const,
                     span:_ 
                 },
                 Expr::Function {
                     visibility: b_visibility,
+                    ty: b_ty,
                     name: b_name,
                     params: b_params,
                     return_ty: b_return_ty,
                     body: b_body,
-                    is_clip: b_is_clip,
                     is_const: b_is_const,
                     span:_ 
                 },
@@ -198,7 +203,7 @@ impl DebugAstEq for Expr {
                 a_params.debug_ast_assert_eq(b_params, codebase);
                 a_return_ty.debug_ast_assert_eq(b_return_ty, codebase);
                 a_body.debug_ast_assert_eq(b_body, codebase);
-                a_is_clip.debug_ast_assert_eq(b_is_clip, codebase);
+                a_ty.debug_ast_assert_eq(b_ty, codebase);
                 a_is_const.debug_ast_assert_eq(b_is_const, codebase);
             }
             (

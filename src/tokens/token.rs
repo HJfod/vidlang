@@ -48,9 +48,11 @@ impl BracketType {
 pub enum Symbol {
     // Keywords
     Let, Const, Type, Function, Effect, Clip, Module,
-    Trait, Impl, Struct, Unit,
-    Intrinsic, Using, Private, Public, Ref,
-    Typeof,
+    Trait, Impl, Struct, Unit, Enum,
+    Using, Private, Public, Ref,
+    InvokeIntrinsic,
+    #[strum(to_string="typeof")]
+    TypeOf,
     Match, If, Then, Else, While, For, In, Loop, Await, Return, Yield,
     And, Or,
     True, False, None,

@@ -1,9 +1,6 @@
 
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, ParseArgs, Visibility},
-    pools::{exprs::ExprId, messages::Message},
-    codebase::Codebase,
-    tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, FunctionType, IdentPath, ParseArgs, UsingIdentItem, UsingIdentPath, Visibility}, codebase::Codebase, pools::{exprs::ExprId, messages::Message}, tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
@@ -28,13 +25,72 @@ impl Expr {
         FunctionParam { kind, name, ty, default_value }
     }
 
+    fn parse_using_item_path(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> UsingIdentPath {
+        let start = tokens.start();
+        let mut parent_idents = vec![tokens.expect_ident(codebase)];
+
+        // If there are no segments except the first one, that is an error
+        if !tokens.peek_symbol(Symbol::Scope, codebase) {
+            codebase.messages.add(Message::new_error("expected path to one or more items", tokens.span_from(start)));
+            return UsingIdentPath {
+                parent: IdentPath(parent_idents, tokens.span_from(start)),
+                item: UsingIdentItem::Items(vec![]),
+                span: tokens.span_from(start)
+            };
+        }
+
+        while tokens.peek_and_expect_symbol(Symbol::Scope, codebase) {
+            let span_up_to_this_scope = tokens.span_from(start);
+            // Peeking any because we will assume all brackets are attempts to 
+            // start importing multiple items
+            if tokens.peek_any_bracketed(codebase) {
+                let Token::Bracketed(_, mut content, _) = tokens.expect_bracketed(BracketType::Braces, codebase) else {
+                    panic!("peek_any_brackected returned true but expect_bracketed did not return Bracketed");
+                };
+                let parent = IdentPath(parent_idents, span_up_to_this_scope);
+                // Import everything with `{ ... }`
+                if content.peek_and_expect_symbol(Symbol::DotDotDot, codebase) {
+                    return UsingIdentPath {
+                        parent,
+                        item: UsingIdentItem::AllItems,
+                        span: tokens.span_from(start),
+                    };
+                }
+                // Otherwise assume there are a bunch of specific items being imported
+                else {
+                    let items = Expr::parse_comma_list(&mut content, codebase, args, |tks, cb, _| tks.expect_ident(cb));
+                    return UsingIdentPath {
+                        parent,
+                        item: UsingIdentItem::Items(items),
+                        span: tokens.span_from(start)
+                    }
+                }
+            }
+            else {
+                let next_ident = tokens.expect_ident(codebase);
+                // If this is the last segment, then we are importing just one item
+                if !tokens.peek_symbol(Symbol::Scope, codebase) {
+                    return UsingIdentPath {
+                        parent: IdentPath(parent_idents, span_up_to_this_scope),
+                        item: UsingIdentItem::Items(vec![next_ident]),
+                        span: tokens.span_from(start)
+                    }
+                }
+                // Otherwise push this to the parent list and keep going
+                parent_idents.push(next_ident);
+            }
+        }
+
+        unreachable!()
+    }
+
     pub(super) fn try_parse_definition(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> Option<ExprId> {
         let start = tokens.start();
 
         let is_vis_modifier = |sym| matches!(sym, Symbol::Private | Symbol::Public);
 
-        // Get visibility; by default, everything is private
-        let mut visibility = Visibility::Private;
+        // Get visibility; by default, everything is public (except imports)
+        let mut visibility = None;
         let mut found_explicit_vis = None;
         while let Some((sym, span)) = tokens.peek_and_expect_symbol_of(codebase, is_vis_modifier) {
             if found_explicit_vis.is_some() {
@@ -45,7 +101,7 @@ impl Expr {
             }
             else {
                 found_explicit_vis = Some(span);
-                visibility = if sym == Symbol::Private { Visibility::Public } else { Visibility::Private };
+                visibility = Some(if sym == Symbol::Private { Visibility::Public } else { Visibility::Private });
             }
         }
 
@@ -76,7 +132,7 @@ impl Expr {
                 Vec::new()
             };
             return Some(codebase.exprs.add(Expr::Module {
-                visibility,
+                visibility: visibility.unwrap_or(Visibility::Public),
                 name,
                 items,
                 span: tokens.span_from(start)
@@ -86,7 +142,7 @@ impl Expr {
         // Function or clip definition
         if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(
             codebase,
-            |sym| matches!(sym, Symbol::Function | Symbol::Clip)
+            |sym| matches!(sym, Symbol::Function | Symbol::Clip | Symbol::Effect)
         ) {
             let name = Expr::parse_ident_path(tokens, codebase, args);
             let params = match tokens.expect_bracketed(BracketType::Parentheses, codebase) {
@@ -109,9 +165,9 @@ impl Expr {
                 .flatten();
 
             // Clips have special wacky types
-            if let Some(ref ret) = return_ty && sym == Symbol::Clip {
+            if let Some(ref ret) = return_ty && sym != Symbol::Function {
                 codebase.messages.add(Message::new_error(
-                    "clips may not have explicit return types",
+                    "clips and effects may not have explicit return types",
                     codebase.exprs.get(*ret).span()
                 ));
             }
@@ -124,10 +180,50 @@ impl Expr {
                 Expr::parse_block(tokens, codebase, args)
             };
             return Some(codebase.exprs.add(Expr::Function {
-                visibility,
+                visibility: visibility.unwrap_or(Visibility::Public),
+                ty: match sym {
+                    Symbol::Function => FunctionType::Function,
+                    Symbol::Clip => FunctionType::Clip,
+                    Symbol::Effect => FunctionType::Effect,
+                    _ => unreachable!(),
+                },
                 name, params, return_ty, body,
-                is_clip: sym == Symbol::Clip,
                 is_const,
+                span: tokens.span_from(start)
+            }));
+        }
+
+        // Type definition `type A = B`
+        if tokens.peek_and_expect_symbol(Symbol::Type, codebase) {
+            if is_const {
+                codebase.messages.add(Message::new_error(
+                    "type definitions may not be marked const",
+                    is_const_span
+                ));
+            }
+            let name = Expr::parse_ident_path(tokens, codebase, args);
+            tokens.peek_and_expect_symbol(Symbol::Assign, codebase);
+            let ty = Expr::parse_type(tokens, codebase, args);
+            return Some(codebase.exprs.add(Expr::TypeDef {
+                visibility: visibility.unwrap_or(Visibility::Public),
+                name,
+                ty,
+                span: tokens.span_from(start)
+            }));
+        }
+
+        // Using definition `using A::{B, C}`
+        if tokens.peek_and_expect_symbol(Symbol::Using, codebase) {
+            if is_const {
+                codebase.messages.add(Message::new_error(
+                    "import declarations may not be marked const",
+                    is_const_span
+                ));
+            }
+            let path = Expr::parse_using_item_path(tokens, codebase, args);
+            return Some(codebase.exprs.add(Expr::Using {
+                visibility: visibility.unwrap_or(Visibility::Private),
+                path,
                 span: tokens.span_from(start)
             }));
         }
@@ -141,7 +237,7 @@ impl Expr {
             let value = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
                 .then(|| Expr::parse(tokens, codebase, args));
             return Some(codebase.exprs.add(Expr::Var {
-                visibility,
+                visibility: visibility.unwrap_or(if is_const { Visibility::Public } else { Visibility::Private }),
                 name, ty, value,
                 span: tokens.span_from(start),
                 is_const,

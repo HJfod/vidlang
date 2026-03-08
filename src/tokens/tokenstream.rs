@@ -127,6 +127,9 @@ impl Tokens {
     pub fn peek_bracketed(&mut self, ty: BracketType, codebase: &mut Codebase) -> bool {
         self.peek_no_attrs(codebase, |p| matches!(p, Token::Bracketed(bty, ..) if *bty == ty))
     }
+    pub fn peek_any_bracketed(&mut self, codebase: &mut Codebase) -> bool {
+        self.peek_no_attrs(codebase, |p| matches!(p, Token::Bracketed(..)))
+    }
     pub fn expect_bracketed(&mut self, ty: BracketType, codebase: &mut Codebase) -> Token {
         self.expect_no_attrs(
             ty.expected_name(),

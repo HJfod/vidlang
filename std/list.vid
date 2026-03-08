@@ -1,5 +1,11 @@
 
-intrinsic function length(list: [Any]) -> int;
+function length(list: [Any]) -> int {
+    invoke_intrinsic list_length(list)
+}
 
-intrinsic function add(list: [Any], item: (typeof list)::Item);
-intrinsic function remove(list: [Any], item: (typeof list)::Item);
+function add(list: [Any], item: (typeof list)::Item) {
+    invoke_intrinsic list_add(list, item)
+}
+function remove(list: [Any], item: (typeof list)::Item) {
+    invoke_intrinsic list_remove(list, item)
+}

@@ -1,8 +1,7 @@
+use std::str::FromStr;
+
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, IdentPath, ParseArgs, StringComp},
-    pools::{exprs::ExprId, messages::Message},
-    codebase::Codebase,
-    tokens::{token::{BracketType, StrLitComp, Symbol, Token}, tokenstream::Tokens,
+    ast::{expr::{Expr, FunctionParam, FunctionParamKind, IdentPath, ParseArgs, StringComp}, intrinsics::Intrinsic}, codebase::Codebase, pools::{exprs::ExprId, messages::Message}, tokens::{token::{BracketType, StrLitComp, Symbol, Token}, tokenstream::Tokens,
 }};
 
 impl Expr {
@@ -17,6 +16,8 @@ impl Expr {
     }
 
     pub(super) fn parse_value(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
+        let start = tokens.start();
+
         // Arrow functions
         if (
             tokens.peek_bracketed(BracketType::Parentheses, codebase) || 
@@ -27,8 +28,6 @@ impl Expr {
                 |t| matches!(t, Token::Symbol(Symbol::FatArrow | Symbol::Arrow, _))
             )
         {
-            let start = tokens.start();
-
             let params = if tokens.peek_ident(codebase) {
                 vec![FunctionParam {
                     kind: FunctionParamKind::Normal,
@@ -67,6 +66,27 @@ impl Expr {
             let content = Expr::parse(&mut sub_tokens, codebase, args);
             sub_tokens.expect_empty(codebase);
             return content;
+        }
+
+        // Intrinsics
+        if tokens.peek_and_expect_symbol(Symbol::InvokeIntrinsic, codebase) {
+            let intrinsic_ident = tokens.expect_ident(codebase);
+            let intrinsic_name = codebase.names.get(intrinsic_ident.0);
+            let intrinsic = match Intrinsic::from_str(intrinsic_name) {
+                Ok(i) => i,
+                Err(_) => {
+                    codebase.messages.add(Message::new_error(
+                        format!("unknown intrinsic '{intrinsic_name}'"),
+                        intrinsic_ident.1
+                    ));
+                    Intrinsic::Invalid
+                }
+            };
+            let args = match tokens.expect_bracketed(BracketType::Parentheses, codebase) {
+                Token::Bracketed(_, mut sub_tokens, _) => Expr::parse_comma_list(&mut sub_tokens, codebase, args, Expr::parse),
+                _ => Vec::new()
+            };
+            return codebase.exprs.add(Expr::InvokeIntrinsic { intrinsic, args, span: tokens.span_from(start) });
         }
 
         // Basic literals
