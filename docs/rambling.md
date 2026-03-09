@@ -1,4 +1,31 @@
 
+### reactivity (is it really figured out?)
+
+so like ok the root problem i have is the fact that i would very much be able to do this
+```rs
+clip video() {
+    let text = text("Hello world");
+
+    for char in text.chars {
+        char.scale_to(100%, 0.2s);
+        await 0.1s;
+    }
+}
+```
+
+this is like a foundational effect. however doing it like this requires me to be able to have clips export their children. and that is what causes all of my reactivity issues and shit, because otherwise i could just run the actual bodies of clips later on and not have to do reactivity at all, instead just first figuring out the eventual final value of a property and then using that for the clip body (since it would be indistinguishable reactivity). however would i deal with characters in that case? i would have to do it using callbacks or smth like this
+
+```rs
+clip video() {
+    let text = text("Hello world", char => {
+        char.scale_to(100%, 0.2s);
+        await 0.1s;
+    });
+}
+```
+
+and that's just not nice.
+
 ### reactivity (figured out)
 
 ok nvm i have figured it out
