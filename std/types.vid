@@ -8,8 +8,9 @@ type Any = __intrinsic_any_type;
 const forever: duration = invoke_intrinsic forever_duration();
 
 type Durational = {
-    const DURATION: duration;
-    frame: int;
+    const total_duration: duration;
+    const entry_frame: duration;
+    current_frame: duration;
 }
 
 type Vec = {
@@ -18,8 +19,9 @@ type Vec = {
 }
 
 type Clip = {
-    const DURATION: duration;
-    frame: int;
+    const total_duration: duration;
+    const entry_frame: duration;
+    current_frame: duration;
 
     position: Vec;
     scale: Vec;

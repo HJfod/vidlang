@@ -51,7 +51,8 @@ pub enum FunctionParamKind {
     Normal,
     /// Function param that is passed by (mutable) reference
     Ref,
-    /// Constant-time function param
+    /// Constant property (only allowed in functions whose parameters are 
+    /// properties, aka clips & effects)
     Const,
 }
 
@@ -148,10 +149,11 @@ pub enum Expr {
         args: Vec<ExprId>,
         span: Span,
     },
-    // `a.b`
+    // `a.b` or `a?.b`
     FieldAccess {
         target: ExprId,
         field: IdentPath,
+        optional: bool,
         span: Span,
     },
     // `a = 5`
@@ -159,6 +161,13 @@ pub enum Expr {
         target: ExprId,
         value: ExprId,
         op: (Symbol, Span),
+        span: Span,
+    },
+    // `a = from prop1, prop2 { .. }`
+    AssignFrom {
+        target: ExprId,
+        properties: Vec<Ident>,
+        body: ExprId,
         span: Span,
     },
     // `a and b and c`
@@ -240,6 +249,7 @@ impl Expr {
             Self::InvokeIntrinsic { .. } => true,
             Self::FieldAccess { .. } => true,
             Self::Assign { .. } => true,
+            Self::AssignFrom { .. } => false,
             Self::LogicChain { .. } => true,
 
             Self::If { truthy, falsy, .. } => sub_requires(falsy.unwrap_or(*truthy)),
@@ -275,6 +285,7 @@ impl Expr {
             Self::InvokeIntrinsic { span, .. } => *span,
             Self::FieldAccess { span, .. } => *span,
             Self::Assign { span, .. } => *span,
+            Self::AssignFrom { span, .. } => *span,
             Self::LogicChain { span, .. } => *span,
             Self::If { span, .. } => *span,
             Self::Return(_, span) => *span,

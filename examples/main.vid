@@ -21,9 +21,9 @@ clip epic_rectangle(width: float, height: float) {
 effect glow(target: Clip) {
 }
 
-effect move(target: Clip, x: float, y: float, const time: duration) {
-    target.x.to(x, time);
-    target.y.to(y, time);
+effect move(target: Clip, x: float, y: float, time: duration) {
+    target.x.lerp_to(x, time);
+    target.y.lerp_to(y, time);
     await time;
 }
 

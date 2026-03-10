@@ -7,19 +7,19 @@ function to_float(value: int) -> float {
 }
 
 // Casting to/from a duration (if you need to do more complex math on one)
-const function to_seconds(value: duration) -> float {
+function to_seconds(value: duration) -> float {
     value.to_frames() / framerate
 }
-const function to_milliseconds(value: duration) -> float {
+function to_milliseconds(value: duration) -> float {
     value.to_seconds() / 1000.0
 }
-const function to_frames(value: duration) -> int {
+function to_frames(value: duration) -> int {
     invoke_intrinsic duration_to_frames(value)
 }
-const function to_duration_from_frames(value: int) -> duration {
+function to_duration_from_frames(value: int) -> duration {
     invoke_intrinsic duration_from_frames(value)
 }
-const function to_duration_from_seconds(value: float) -> duration {
+function to_duration_from_seconds(value: float) -> duration {
     invoke_intrinsic duration_from_seconds(value)
 }
 
@@ -68,7 +68,7 @@ function neg(target: int) -> int {
 function neg(target: float) -> float {
     invoke_intrinsic float_neg(target)
 }
-const function neg(target: duration) -> duration {
+function neg(target: duration) -> duration {
     target.to_seconds().neg().to_duration_from_seconds()
 }
 
@@ -79,7 +79,7 @@ function add(a: int, b: int) -> int {
 function add(a: float, b: float) -> float {
     invoke_intrinsic float_add(a, b)
 }
-const function add(a: duration, b: duration) -> duration {
+function add(a: duration, b: duration) -> duration {
     (a.to_seconds() + b.to_seconds()).to_duration_from_seconds()
 }
 function add(a: string, b: string) -> string {
@@ -96,7 +96,7 @@ function sub(a: int, b: int) -> int {
 function sub(a: float, b: float) -> float {
     invoke_intrinsic float_sub(a, b)
 }
-const function sub(a: duration, b: duration) -> duration {
+function sub(a: duration, b: duration) -> duration {
     (a.to_seconds() - b.to_seconds()).to_duration_from_seconds()
 }
 
@@ -107,10 +107,10 @@ function mul(a: int, b: int) -> int {
 function mul(a: float, b: float) -> float {
     invoke_intrinsic float_mul(a, b)
 }
-const function mul(a: duration, b: int) -> duration {
+function mul(a: duration, b: int) -> duration {
     a * b.to_float()
 }
-const function mul(a: duration, b: float) -> duration {
+function mul(a: duration, b: float) -> duration {
     (a.to_seconds() * b).to_duration_from_seconds()
 }
 
@@ -121,10 +121,10 @@ function div(a: int, b: int) -> int {
 function div(a: float, b: float) -> float {
     invoke_intrinsic float_div(a, b)
 }
-const function div(a: duration, b: int) -> duration {
+function div(a: duration, b: int) -> duration {
     a / b.to_float()
 }
-const function div(a: duration, b: float) -> duration {
+function div(a: duration, b: float) -> duration {
     (a.to_seconds() / b).to_duration_from_seconds()
 }
 
@@ -135,7 +135,7 @@ function modulo(a: int, b: int) -> int {
 function modulo(a: float, b: float) -> float {
     invoke_intrinsic float_mod(a, b)
 }
-const function modulo(a: duration, b: float) -> duration {
+function modulo(a: duration, b: float) -> duration {
     (a.to_seconds() mod b).to_duration_from_seconds()
 }
 
@@ -154,7 +154,7 @@ function more_than(a: int, b: int) -> bool {
 function more_than(a: float, b: float) -> bool {
     invoke_intrinsic float_more_than(a, b)
 }
-const function more_than(a: duration, b: duration) -> bool {
+function more_than(a: duration, b: duration) -> bool {
     a.to_float() > b.to_float()
 }
 
@@ -165,7 +165,7 @@ function more_than_or_eq(a: int, b: int) -> bool {
 function more_than_or_eq(a: float, b: float) -> bool {
     invoke_intrinsic float_more_than_or_eq(a, b)
 }
-const function more_than_or_eq(a: duration, b: duration) -> bool {
+function more_than_or_eq(a: duration, b: duration) -> bool {
     a.to_float() >= b.to_float()
 }
 
@@ -176,7 +176,7 @@ function less_than(a: int, b: int) -> bool {
 function less_than(a: float, b: float) -> bool {
     invoke_intrinsic float_less_than(a, b)
 }
-const function less_than(a: duration, b: duration) -> bool {
+function less_than(a: duration, b: duration) -> bool {
     a.to_float() < b.to_float()
 }
 
@@ -187,7 +187,7 @@ function less_than_or_eq(a: int, b: int) -> bool {
 function less_than_or_eq(a: float, b: float) -> bool {
     invoke_intrinsic float_less_than_or_eq(a, b)
 }
-const function less_than_or_eq(a: duration, b: duration) -> bool {
+function less_than_or_eq(a: duration, b: duration) -> bool {
     a.to_float() <= b.to_float()
 }
 
@@ -201,7 +201,7 @@ function eq(a: int, b: int) -> bool {
 function eq(a: float, b: float) -> bool {
     invoke_intrinsic float_eq(a, b)
 }
-const function eq(a: duration, b: duration) -> bool {
+function eq(a: duration, b: duration) -> bool {
     a.to_float() == b.to_float()
 }
 function eq(a: string, b: string) -> bool {
@@ -218,7 +218,7 @@ function neq(a: int, b: int) -> bool {
 function neq(a: float, b: float) -> bool {
     invoke_intrinsic float_neq(a, b)
 }
-const function neq(a: duration, b: duration) -> bool {
+function neq(a: duration, b: duration) -> bool {
     a.to_float() != b.to_float()
 }
 function neq(a: string, b: string) -> bool {

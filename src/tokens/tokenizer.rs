@@ -282,8 +282,8 @@ impl Token {
         else if c == '*' && peek == Some('*') {
             sym.push(iter.next().unwrap());
         }
-        // ??
-        else if c == '?' && peek == Some('?') {
+        // ?? or ?.
+        else if c == '?' && peek.is_some_and(|p| matches!(p, '?' | '.')) {
             sym.push(iter.next().unwrap());
         }
         // ::

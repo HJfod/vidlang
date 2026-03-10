@@ -7,6 +7,34 @@ use crate::{
 };
 
 impl Expr {
+    pub(super) fn parse_from_expr(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs)
+     -> (Vec<Ident>, ExprId)
+    {
+        tokens.expect_symbol(Symbol::From, codebase);
+        let mut idents = vec![];
+        // Remember to check for EOF here
+        while tokens.peek().is_some() && !tokens.peek_bracketed(BracketType::Braces, codebase) {
+            // Require identifiers to be separated with commas
+            if !idents.is_empty() {
+                tokens.expect_symbol(Symbol::Comma, codebase);
+            }
+            // Allow trailing comma
+            if tokens.peek_bracketed(BracketType::Braces, codebase) {
+                break;
+            }
+            idents.push(tokens.expect_ident(codebase));
+        }
+        // Check if the user forgot to add any idents, aka wrote `from { .. }`
+        if idents.is_empty() {
+            codebase.messages.add(Message::new_error(
+                "from-expressions must depend on at least one property",
+                tokens.last_span()
+            ));
+        }
+        let body = Expr::parse_block(tokens, codebase, args);
+        (idents, body)
+    }
+
     fn parse_call_arg(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> (Option<Ident>, ExprId) {
         if tokens.peek_ident(codebase) &&
             tokens.peek_n(1).is_some_and(
@@ -36,6 +64,18 @@ impl Expr {
         }
         if let Some(d) = Expr::try_parse_definition(tokens, codebase, args) {
             return d;
+        }
+        // Check for false from expressions (`from <ident>` or `from { .. }`)
+        if tokens.peek_symbol(Symbol::From, codebase) && tokens.peek_n(1).is_some_and(
+            |t| matches!(t, Token::Ident(..) | Token::Bracketed(BracketType::Braces, ..))
+        ) {
+            let start = tokens.start();
+            let (_, body) = Expr::parse_from_expr(tokens, codebase, args);
+            codebase.messages.add(Message::new_error(
+                "from-expressions are only allowed as the right-hand-side of assignments",
+                tokens.span_from(start)
+            ));
+            return body;
         }
         Expr::parse_value(tokens, codebase, args)
     }
@@ -105,11 +145,14 @@ impl Expr {
                 });
                 continue;
             }
-            if tokens.peek_and_expect_symbol(Symbol::Dot, codebase) {
+            if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(
+                codebase, |t| matches!(t, Symbol::Dot | Symbol::QuestionDot)
+            ) {
                 let field_name = Expr::parse_ident_path(tokens, codebase, args);
                 expr = codebase.exprs.add(Expr::FieldAccess {
                     target: expr,
                     field: field_name,
+                    optional: sym == Symbol::QuestionDot, 
                     span: tokens.span_from(start)
                 });
                 continue;
@@ -274,8 +317,6 @@ impl Expr {
 
         let mut found_one = false;
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(codebase, is_ass_sym) {
-            let rhs = Expr::parse_logic_chain(tokens, codebase, args);
-
             if found_one {
                 codebase.messages.add(
                     Message::new_error("only one assignment operator may be used at once", span)
@@ -286,8 +327,19 @@ impl Expr {
                         )
                 );
             }
+            found_one = true;
+
+            if tokens.peek_symbol(Symbol::From, codebase) {
+                let (properties, body) = Expr::parse_from_expr(tokens, codebase, args);
+                lhs = codebase.exprs.add(Expr::AssignFrom {
+                    target: lhs,
+                    properties,
+                    body,
+                    span
+                });
+            }
             else {
-                found_one = true;
+                let rhs = Expr::parse_logic_chain(tokens, codebase, args);
                 lhs = codebase.exprs.add(Expr::Assign {
                     target: lhs,
                     value: rhs,

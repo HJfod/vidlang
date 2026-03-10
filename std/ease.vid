@@ -1,27 +1,15 @@
 
 // Huge thank you to https://easings.net/sv for the algorithms
 
-// UNRESOLVED QUESTIONS:
-// `apply_easing` shouldn't have a `frame` or `duration` should it?
-// What happens if you stack two easings on top of each other? What if you do it like this:
-// ```
-// a.sine_in_out().sine_in_out();
-// vs
-// a.sine_in_out();
-// a.sine_in_out();
-// ```
-
-// SOLUTIONS:
-// Have easing functions take ownership of the Durational, warn if you pass in 
-// a Clip because that's probably not intentional
-
 private effect apply_easing(target: Effect, algo: (float) => float) {
-    // todo: warn if `target` is a `Clip`
-    if target.DURATION > 0 {
-        // Normalize variable to go from 0 to 1
-        target.frame = algo(target.frame / target.DURATION.std::ops::to_float()) * target.DURATION;
+    target.current_frame = from current_frame, algo {
+        // target.entry_frame and target.total_duration are constants so they 
+        // may be used in from-expressions
+        let progression = std::math::clamp((current_frame - target.entry_frame) / target.total_duration, 0, 1);
+        progression = algo(progression);
+        target.entry_frame + progression * target.total_duration
     }
-    await target;
+    await target.total_duration;
 }
 
 effect sine_in_out(target: Effect) {

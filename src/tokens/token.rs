@@ -49,6 +49,7 @@ pub enum Symbol {
     // Keywords
     Let, Const, Type, Function, Effect, Clip, Module,
     Trait, Impl, Struct, Unit, Enum,
+    From,
     Using, Private, Public, Ref,
     InvokeIntrinsic,
     #[strum(to_string="typeof")]
@@ -100,6 +101,8 @@ pub enum Symbol {
     Scope,
     #[strum(to_string=".")]
     Dot,
+    #[strum(to_string="?.")]
+    QuestionDot,
     #[strum(to_string="...")]
     DotDotDot,
     #[strum(to_string=",")]

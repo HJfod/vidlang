@@ -244,16 +244,19 @@ impl DebugAstEq for Expr {
                 Expr::FieldAccess {
                     target: a_target,
                     field: a_field,
+                    optional: a_optional,
                     span: _,
                 },
                 Expr::FieldAccess {
                     target: b_target,
                     field: b_field,
+                    optional: b_optional,
                     span: _,
                 },
             ) => {
                 a_target.debug_ast_assert_eq(b_target, codebase);
                 a_field.debug_ast_assert_eq(b_field, codebase);
+                a_optional.debug_ast_assert_eq(b_optional, codebase);
             },
             (
                 Expr::Assign {

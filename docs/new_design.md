@@ -192,7 +192,8 @@ function my_clip(entry_frame: int) -> MyClip {
     let _self = _new_clip_with_extra_properties(entry_frame, {});
     _child_0 = _self._add_child(circle(.., _self.total_duration));
     _eff_0 = _self._add_effect(sine_in_out(move_to(_child_0, 20, 20, 1s, _self.total_duration), _self.total_duration));
-    _self._add_await_effect_to_completion(_eff_0);
+    _self._add_await_duration(_eff_0.total_duration);
+    _self._add_drop_effect(_eff_0);
     _self._add_drop_child(_child_0);
     return _self;
 }
