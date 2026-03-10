@@ -46,9 +46,9 @@ impl Expr {
             let Some(Token::Symbol(sym, sym_span)) = tokens.next() else {
                 unreachable!("a symbol was previously peeked but tokens.next() did not return one");
             };
-            if sym == Symbol::Arrow {
+            if sym == Symbol::FatArrow {
                 codebase.messages.add(Message::new_error(
-                    "arrow functions are defined with `=>`, not `->`",
+                    "arrow functions are defined with `->`, not `=>`",
                     sym_span
                 ));
             }

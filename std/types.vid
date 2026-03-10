@@ -1,6 +1,8 @@
 
 // Every type satisfies Any
-type Any = __intrinsic_any_type;
+type Any = IntrinsicAnyTrait;
+
+type Void = {}
 
 // Special duration that lasts forever
 // Awaiting this duration is illegal, since it would make the video last 
@@ -10,7 +12,13 @@ const forever: duration = invoke_intrinsic forever_duration();
 type Durational = {
     const total_duration: duration;
     const entry_frame: duration;
-    current_frame: duration;
+    property current_frame: duration;
+}
+
+type Effect = {
+    const total_duration: duration;
+    const entry_frame: duration;
+    property current_frame: duration;
 }
 
 type Vec = {
@@ -18,15 +26,20 @@ type Vec = {
     y: float;
 }
 
+type Canvas = {}
+
 type Clip = {
     const total_duration: duration;
     const entry_frame: duration;
-    current_frame: duration;
+    property current_frame: duration;
 
-    position: Vec;
-    scale: Vec;
-    skew: Vec;
-    rotation: float;
+    property x: float;
+    property y: float;
+    property scale_x: float;
+    property scale_y: float;
+    property skew_x: float;
+    property skew_y: float;
+    property rotation: float;
 
-    children: [Clip];
+    render: [Canvas -> {}];
 }

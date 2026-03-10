@@ -1,7 +1,7 @@
 
 // Huge thank you to https://easings.net/sv for the algorithms
 
-private effect apply_easing(target: Effect, algo: (float) => float) {
+private effect apply_easing(target: Effect, algo: float -> float) {
     target.current_frame = from current_frame, algo {
         // target.entry_frame and target.total_duration are constants so they 
         // may be used in from-expressions
@@ -13,11 +13,11 @@ private effect apply_easing(target: Effect, algo: (float) => float) {
 }
 
 effect sine_in_out(target: Effect) {
-    await target.apply_easing(x => -(std::math::cos(x * std::math::constants::PI) - 1) / 2);
+    await target.apply_easing(x -> -(std::math::cos(x * std::math::constants::PI) - 1) / 2);
 }
 effect sine_in(target: Effect) {
-    await target.apply_easing(x => 1 - std::math::cos((x * std::math::constants::PI) / 2));
+    await target.apply_easing(x -> 1 - std::math::cos((x * std::math::constants::PI) / 2));
 }
 effect sine_out(target: Effect) {
-    await target.apply_easing(x => std::math::sin((x * std::math::constants::PI) / 2));
+    await target.apply_easing(x -> std::math::sin((x * std::math::constants::PI) / 2));
 }
