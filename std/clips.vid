@@ -1,22 +1,33 @@
 
 clip rectangle(width: float, height: float, color: Color) {
-    render.push(canvas -> invoke_intrinsic render_rectangle(canvas, width, height, color));
+    render self(canvas, super) {
+        render super(canvas);
+        invoke_intrinsic render_rectangle(canvas, width, height, color);
+    }
 }
 
 clip circle(radius: float, color: Color) {
-    render.push(canvas -> invoke_intrinsic render_circle(canvas, radius, color));
+    render self(canvas, super) {
+        render super(canvas);
+        invoke_intrinsic render_circle(canvas, radius, color);
+    }
 }
 
-type CharClip = Clip + { char: string, color: Color };
+clip char(char: string, color: Color) {}
 
 clip text(
     value: string,
     font: string = "",
-    chars: [CharClip] from value, font
+    chars: [clip char] from value, font
 ) {
     chars = from value, font {
         invoke_intrinsic create_text_chars(value, font)
     }
 }
 
-type TextClip = text::(string)::Return;
+effect blur(target: ref Clip) {
+    render target(canvas, super) {
+        render super(canvas);
+        
+    }
+}

@@ -1,7 +1,4 @@
 
-// Every type satisfies Any
-type Any = IntrinsicAnyTrait;
-
 type Void = {}
 
 // Special duration that lasts forever
@@ -9,37 +6,71 @@ type Void = {}
 // literally forever
 const forever: duration = invoke_intrinsic forever_duration();
 
-type Durational = {
+// Intrinsic types (here for reference, not actually compiled)
+
+// The special "any" keyword allows specifying that a type may accept any kind of 
+invoke_intrinsic type any {}
+
+// Any awaitable construct
+invoke_intrinsic type awaitable {
     const total_duration: duration;
     const entry_frame: duration;
-    property current_frame: duration;
+    current_frame: duration;
 }
-
-type Effect = {
+invoke_intrinsic type effect {
     const total_duration: duration;
     const entry_frame: duration;
-    property current_frame: duration;
+    current_frame: duration;
 }
-
-type Vec = {
+invoke_intrinsic type clip {
     x: float;
     y: float;
+    scale_x: float;
+    scale_y: float;
+    skew_x: float;
+    skew_y: float;
+    rotation: float;
 }
 
 type Canvas = {}
 
-type Clip = {
-    const total_duration: duration;
-    const entry_frame: duration;
-    property current_frame: duration;
+// Colors may be created with hex color literals like #ff00aa
+type Color = {
+    r: int;
+    g: int;
+    b: int;
+}
 
-    property x: float;
-    property y: float;
-    property scale_x: float;
-    property scale_y: float;
-    property skew_x: float;
-    property skew_y: float;
-    property rotation: float;
+// https://stackoverflow.com/questions/2353211/hsl-to-rgb-color-conversion
 
-    render: [Canvas -> {}];
+private function hue_to_rgb(p: float, q: float, t: float) -> float {
+  if (t < 0.0) t += 1;
+  if (t > 1.0) t -= 1;
+  if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
+  if (t < 1.0/2.0) return q;
+  if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+  return p;
+}
+function hsl(h: float, s: float, l: float) -> Color {
+    let r: float;
+    let g: float;
+    let b: float;
+    if (s == 0) {
+        r = g = b = l;
+    }
+    else {
+        const q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+        const p = 2.0 * l - q;
+        r = hueToRgb(p, q, h + 1.0/3.0);
+        g = hueToRgb(p, q, h);
+        b = hueToRgb(p, q, h - 1.0/3.0);
+    }
+    return Color {
+        r: std::math::round(r * 255.0),
+        g: std::math::round(g * 255.0),
+        b: std::math::round(b * 255.0),
+    };
+}
+function rgb(r: int, g: int, b: int) -> Color {
+    Color { r, g, b }
 }
