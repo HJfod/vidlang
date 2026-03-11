@@ -40,7 +40,7 @@
 				},
 				{
 					"name": "keyword.control.vid",
-					"match": "\\b(let|const|type|function|clip|trait|impl|private|public|module|using|if|then|else|while|for|in|loop|await|return|yield|and|or|mod|unit|get|set|invoke_intrinsic|typeof|struct|enum|effect|from|awaitable|any|render)\\b"
+					"match": "\\b(let|const|type|function|clip|trait|impl|private|public|module|using|if|then|else|while|for|in|loop|await|return|yield|and|or|mod|unit|get|set|invoke_intrinsic|typeof|struct|enum|effect|from|awaitable|any)\\b"
 				},
 				{
 					"name": "keyword.other.vid",
@@ -79,7 +79,7 @@
 					"match": "(?<=const\\s+)\\b(\\p{XID_Start}\\p{XID_Continue}*)\\b"
 				},
 				{
-					"match": "\\b(bool|int|float|string|duration)\\b",
+					"match": "\\b(bool|int|float|string|duration|color)\\b",
 					"name": "entity.name.type.language.vid"
 				},
 				{
@@ -91,7 +91,7 @@
 					}
 				},
 				{
-					"match": "(?<=(clip|:|->)\\s*)(\\p{XID_Start}\\p{XID_Continue}*)",
+					"match": "(?<=(clip|effect|:|->)\\s*)(\\p{XID_Start}\\p{XID_Continue}*)",
 					"name": "entity.name.type.vid"
 				},
 				{

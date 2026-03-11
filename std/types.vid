@@ -30,28 +30,35 @@ invoke_intrinsic type clip {
     skew_x: float;
     skew_y: float;
     rotation: float;
+    content_width: float;
+    content_height: float;
 }
 
-type Canvas = {}
+function get_all_child_clips(target: ref clip) -> [clip] {}
 
-// Colors may be created with hex color literals like #ff00aa
-type Color = {
-    r: int;
-    g: int;
-    b: int;
+type Canvas = {
+    width: float;
+    height: float;
+    pixels: [color];
+}
+
+// Base rendering implementation for all clips
+// todo: how on earth would this dispatch the correct overload of `render()`??
+// i'm guessing i should hardcode child rendering to be a compiler built-in thing after all...
+function render(target: ref clip, canvas: ref Canvas) {
 }
 
 // https://stackoverflow.com/questions/2353211/hsl-to-rgb-color-conversion
 
 private function hue_to_rgb(p: float, q: float, t: float) -> float {
-  if (t < 0.0) t += 1;
-  if (t > 1.0) t -= 1;
-  if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
-  if (t < 1.0/2.0) return q;
-  if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
-  return p;
+    if (t < 0.0) t += 1;
+    if (t > 1.0) t -= 1;
+    if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
+    if (t < 1.0/2.0) return q;
+    if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+    return p;
 }
-function hsl(h: float, s: float, l: float) -> Color {
+function hsl(h: float, s: float, l: float) -> color {
     let r: float;
     let g: float;
     let b: float;
@@ -65,12 +72,15 @@ function hsl(h: float, s: float, l: float) -> Color {
         g = hueToRgb(p, q, h);
         b = hueToRgb(p, q, h - 1.0/3.0);
     }
-    return Color {
-        r: std::math::round(r * 255.0),
-        g: std::math::round(g * 255.0),
-        b: std::math::round(b * 255.0),
-    };
+    return rgb(
+        std::math::round(r * 255.0),
+        std::math::round(g * 255.0),
+        std::math::round(b * 255.0),
+    );
 }
-function rgb(r: int, g: int, b: int) -> Color {
-    Color { r, g, b }
+function rgb(r: int, g: int, b: int) -> color {
+    rgba(r, g, b, 255)
+}
+function rgba(r: int, g: int, b: int, a: int) -> color {
+    invoke_intrinsic create_color(r, g, b, a)
 }

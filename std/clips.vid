@@ -1,19 +1,22 @@
 
 clip rectangle(width: float, height: float, color: Color) {
-    render self(canvas, super) {
-        render super(canvas);
-        invoke_intrinsic render_rectangle(canvas, width, height, color);
-    }
+}
+function render(target: ref clip rectangle, canvas: ref Canvas) {
+    invoke_intrinsic render_rectangle(canvas, target.width, target.height, target.color);
 }
 
 clip circle(radius: float, color: Color) {
-    render self(canvas, super) {
-        render super(canvas);
-        invoke_intrinsic render_circle(canvas, radius, color);
-    }
+}
+function render(target: ref clip circle, canvas: ref Canvas) {
+    invoke_intrinsic render_circle(canvas, target.radius, target.color);
 }
 
-clip char(char: string, color: Color) {}
+clip char(char: string, font: string, color: Color) {
+    invoke_intrinsic create_text_chars(char, font)[0]
+}
+function render(target: ref clip char, canvas: ref Canvas) {
+    invoke_intrinsic render_char(canvas, target.char, target.font, target.color);
+}
 
 clip text(
     value: string,
@@ -22,12 +25,5 @@ clip text(
 ) {
     chars = from value, font {
         invoke_intrinsic create_text_chars(value, font)
-    }
-}
-
-effect blur(target: ref Clip) {
-    render target(canvas, super) {
-        render super(canvas);
-        
     }
 }
