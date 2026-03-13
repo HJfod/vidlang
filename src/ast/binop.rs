@@ -1,12 +1,26 @@
 
 use crate::{
     ast::expr::{Expr, Ident, IdentPath, LogicChainType, ParseArgs},
-    pools::{exprs::ExprId, messages::Message},
     codebase::Codebase,
+    pools::{exprs::ExprId, messages::Message, modules::Span},
     tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
+    fn make_binop_expr(codebase: &mut Codebase, op: Symbol, op_span: Span, lhs: ExprId, rhs: ExprId, full_span: Span) -> ExprId {
+        let func_name = codebase.names.builtin_binop_name(op, op_span);
+        let call = Expr::CallOrTuple {
+            target: Some(codebase.exprs.add(Expr::Ident(func_name))),
+            args: vec![
+                (codebase.names.tuple_field(0, codebase.exprs.get(lhs).span()), lhs),
+                (codebase.names.tuple_field(1, codebase.exprs.get(rhs).span()), rhs),
+            ],
+            op: Some((op, op_span)),
+            span: full_span,
+        };
+        codebase.exprs.add(call)
+    }
+
     pub(super) fn parse_from_expr(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs)
      -> (Vec<Ident>, ExprId)
     {
@@ -33,29 +47,6 @@ impl Expr {
         }
         let body = Expr::parse_block(tokens, codebase, args);
         (idents, body)
-    }
-
-    fn parse_call_arg(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> (Option<Ident>, ExprId) {
-        if tokens.peek_ident(codebase) &&
-            tokens.peek_n(1).is_some_and(
-                |t| matches!(t, Token::Symbol(Symbol::Colon | Symbol::Assign, _))
-            )
-        {
-            let ident = tokens.expect_ident(codebase);
-            let Some(Token::Symbol(sym, sym_span)) = tokens.next() else {
-                unreachable!("a symbol was previously peeked but tokens.next() did not return one");
-            };
-            if sym == Symbol::Assign {
-                codebase.messages.add(Message::new_error(
-                    "named function args are passed using `arg: value`, not with assignment",
-                    sym_span
-                ));
-            }
-            (Some(ident), Expr::parse(tokens, codebase, args))
-        }
-        else {
-            (None, Expr::parse(tokens, codebase, args))
-        }
     }
 
     fn parse_base(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
@@ -130,21 +121,44 @@ impl Expr {
 
         // Postfix unary operators (calls, indexes, etc.)
         loop {
+            // Calls
             if tokens.peek_bracketed(BracketType::Parentheses, codebase) {
                 let Token::Bracketed(_, mut args_tokens, _) = 
                     tokens.expect_bracketed(BracketType::Parentheses, codebase)
                 else {
                     unreachable!("tokens.peek_bracketed returned true but expect_bracketed did not return Bracketed");
                 };
-                let args = Expr::parse_comma_list(&mut args_tokens, codebase, args, Expr::parse_call_arg);
-                expr = codebase.exprs.add(Expr::Call {
-                    target: expr,
+                let mut args_counter = 0;
+                let args = Expr::parse_comma_list(&mut args_tokens, codebase, args, |tks, pg, ag| {
+                    Expr::parse_tuple_field(tks, pg, ag, &mut args_counter)
+                });
+                expr = codebase.exprs.add(Expr::CallOrTuple {
+                    target: Some(expr),
                     args,
                     op: None,
                     span: tokens.span_from(start),
                 });
                 continue;
             }
+            
+            // Indexes
+            if tokens.peek_bracketed(BracketType::Brackets, codebase) {
+                let Token::Bracketed(_, mut args_tokens, _) = 
+                    tokens.expect_bracketed(BracketType::Brackets, codebase)
+                else {
+                    unreachable!("tokens.peek_bracketed returned true but expect_bracketed did not return Bracketed");
+                };
+                let index = Expr::parse(&mut args_tokens, codebase, args);
+                args_tokens.expect_empty(codebase);
+                expr = codebase.exprs.add(Expr::IndexAccess {
+                    target: expr,
+                    index,
+                    span: tokens.span_from(start),
+                });
+                continue;
+            }
+
+            // Field accesses
             if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(
                 codebase, |t| matches!(t, Symbol::Dot | Symbol::QuestionDot)
             ) {
@@ -164,11 +178,11 @@ impl Expr {
         // (this binds less tightly than the result of a suffix, since 
         // `-func() == -(func())`)
         if let Some((op, func_name)) = unary_op {
-            let call = Expr::Call {
-                args: vec![(None, expr)],
+            let call = Expr::CallOrTuple {
+                args: vec![(codebase.names.tuple_field(0, codebase.exprs.get(expr).span()), expr)],
                 op: Some((op, func_name.1)),
                 span: tokens.span_from(func_name.1.start()),
-                target: codebase.exprs.add(Expr::Ident(func_name)),
+                target: Some(codebase.exprs.add(Expr::Ident(func_name))),
             };
             expr = codebase.exprs.add(call)
         }
@@ -185,7 +199,7 @@ impl Expr {
             // if so (since unary prefixes are ambiguous, as the mathematical 
             // parse for `-2 ** 5` would be `-(2 ** 5)`, but like, who is 
             // expecting that to happen)
-            if let Expr::Call { args, op: Some((_, prev_span)), .. } = codebase.exprs.get(lhs) {
+            if let Expr::CallOrTuple { args, op: Some((_, prev_span)), .. } = codebase.exprs.get(lhs) {
                 // We differentiate between unary and binary operators based on 
                 // argument count :-)
                 if args.len() == 1 {
@@ -199,48 +213,29 @@ impl Expr {
                 }
             }
 
-            let func_name = codebase.names.builtin_binop_name(op, span);
-            let call = Expr::Call {
-                target: codebase.exprs.add(Expr::Ident(func_name)),
-                args: vec![(None, lhs), (None, rhs)],
-                op: Some((op, span)),
-                span: tokens.span_from(start)
-            };
-            lhs = codebase.exprs.add(call);
+            lhs = Expr::make_binop_expr(codebase, op, span, lhs, rhs, tokens.span_from(start));
         }
         lhs
     }
     fn parse_binop_mul(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
         let start = tokens.start();
         let mut lhs = Expr::parse_binop_power(tokens, codebase, args);
-        let is_sum_sym = |sym| matches!(sym, Symbol::Mul | Symbol::Div | Symbol::Mod);
-        while let Some((op, span)) = tokens.peek_and_expect_symbol_of(codebase, is_sum_sym) {
+        while let Some((op, span)) = tokens.peek_and_expect_symbol_of(
+            codebase, |sym| matches!(sym, Symbol::Mul | Symbol::Div | Symbol::Mod)
+        ) {
             let rhs = Expr::parse_binop_power(tokens, codebase, args);
-            let func_name = codebase.names.builtin_binop_name(op, span);
-            let call = Expr::Call {
-                target: codebase.exprs.add(Expr::Ident(func_name)),
-                args: vec![(None, lhs), (None, rhs)],
-                op: Some((op, span)),
-                span: tokens.span_from(start)
-            };
-            lhs = codebase.exprs.add(call)
+            lhs = Expr::make_binop_expr(codebase, op, span, lhs, rhs, tokens.span_from(start));
         }
         lhs
     }
     fn parse_binop_sum(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
         let start = tokens.start();
         let mut lhs = Expr::parse_binop_mul(tokens, codebase, args);
-        let is_sum_sym = |sym| matches!(sym, Symbol::Plus | Symbol::Minus);
-        while let Some((op, span)) = tokens.peek_and_expect_symbol_of(codebase, is_sum_sym) {
+        while let Some((op, span)) = tokens.peek_and_expect_symbol_of(
+            codebase, |sym| matches!(sym, Symbol::Plus | Symbol::Minus)
+        ) {
             let rhs = Expr::parse_binop_mul(tokens, codebase, args);
-            let func_name = codebase.names.builtin_binop_name(op, span);
-            let call = Expr::Call {
-                target: codebase.exprs.add(Expr::Ident(func_name)),
-                args: vec![(None, lhs), (None, rhs)],
-                op: Some((op, span)),
-                span: tokens.span_from(start)
-            };
-            lhs = codebase.exprs.add(call)
+            lhs = Expr::make_binop_expr(codebase, op, span, lhs, rhs, tokens.span_from(start));
         }
         lhs
     }
@@ -265,14 +260,7 @@ impl Expr {
             }
             else {
                 found_one = true;
-                let func_name = codebase.names.builtin_binop_name(op, span);
-                let call = Expr::Call {
-                    target: codebase.exprs.add(Expr::Ident(func_name)),
-                    args: vec![(None, lhs), (None, rhs)],
-                    op: Some((op, span)),
-                    span: tokens.span_from(start)
-                };
-                lhs = codebase.exprs.add(call)
+                lhs = Expr::make_binop_expr(codebase, op, span, lhs, rhs, tokens.span_from(start));
             }
         }
         lhs
@@ -396,41 +384,32 @@ fn binop() {
         "messages was not empty:\n{}", codebase.messages.to_test_string(&codebase)
     );
 
-    let make_shit_up = |op: Symbol, lhs: Expr, rhs: Expr, codebase: &mut Codebase| {
-        let target = codebase.exprs.add(Expr::Ident(codebase.names.builtin_binop_name(op, Span::zero(id))));
-        let lhs = codebase.exprs.add(lhs);
-        let rhs = codebase.exprs.add(rhs);
-        Expr::Call {
-            target,
-            args: vec![(None, lhs), (None, rhs)],
-            op: Some((op, Span::zero(id))),
-            span: Span::zero(id)
-        }
+    let make_shit_up = |op: Symbol, lhs: ExprId, rhs: ExprId, codebase: &mut Codebase| {
+        Expr::make_binop_expr(codebase, op, Span::zero(id), lhs, rhs, Span::zero(id))
     };
 
     // I live in väldigt sad
     let binop_tree = make_shit_up(Symbol::Plus,
         make_shit_up(Symbol::Minus,
             make_shit_up(Symbol::Plus,
-                Expr::Int(1, Span::zero(id)),
+                codebase.exprs.add(Expr::Int(1, Span::zero(id))),
                 make_shit_up(Symbol::Mul,
-                    Expr::Int(2, Span::zero(id)),
+                    codebase.exprs.add(Expr::Int(2, Span::zero(id))),
                     make_shit_up(Symbol::Power,
-                        Expr::Int(3, Span::zero(id)),
-                        Expr::Int(4, Span::zero(id)),
+                        codebase.exprs.add(Expr::Int(3, Span::zero(id))),
+                        codebase.exprs.add(Expr::Int(4, Span::zero(id))),
                         &mut codebase,
                     ),
                     &mut codebase,
                 ),
                 &mut codebase,
             ),
-            Expr::Int(5, Span::zero(id)),
+            codebase.exprs.add(Expr::Int(5, Span::zero(id))),
             &mut codebase,
         ),
-        Expr::Int(6, Span::zero(id)),
+        codebase.exprs.add(Expr::Int(6, Span::zero(id))),
         &mut codebase,
     );
-    let binop_tree = codebase.exprs.add(binop_tree);
 
     let ast = codebase.parsed_asts.get(&id).unwrap().exprs();
     assert_eq!(ast.len(), 1);

@@ -198,7 +198,9 @@ fn symbols() {
     assert_eq!(Symbol::from_str("let"), Ok(Symbol::Let));
     assert_eq!(Symbol::from_str("->"), Ok(Symbol::Arrow));
     assert_eq!(Symbol::from_str("=>"), Ok(Symbol::FatArrow));
+    assert_eq!(Symbol::from_str("typeof"), Ok(Symbol::TypeOf));
     assert!(Symbol::from_str("++=").is_err());
     assert!(Symbol::from_str("=<").is_err());
     assert!(Symbol::from_str("-->").is_err());
+    assert!(Symbol::from_str("type_of").is_err());
 }

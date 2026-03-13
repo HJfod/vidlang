@@ -79,7 +79,7 @@ impl Expr {
         tokens: &mut Tokens,
         codebase: &mut Codebase,
         args: ParseArgs,
-        parse_item: impl Fn(&mut Tokens, &mut Codebase, ParseArgs) -> T
+        mut parse_item: impl FnMut(&mut Tokens, &mut Codebase, ParseArgs) -> T
     ) -> Vec<T> {
         let mut items = Vec::new();
         while tokens.peek().is_some() {

@@ -40,7 +40,7 @@
 				},
 				{
 					"name": "keyword.control.vid",
-					"match": "\\b(let|const|type|function|clip|trait|impl|private|public|module|using|if|then|else|while|for|in|loop|await|return|yield|and|or|mod|unit|get|set|invoke_intrinsic|typeof|struct|enum|effect|from|prop)\\b"
+					"match": "\\b(let|const|type|function|clip|trait|impl|private|public|module|using|if|then|else|while|for|in|loop|await|return|yield|and|or|mod|unit|get|set|invoke_intrinsic|typeof|struct|enum|effect|from)\\b"
 				},
 				{
 					"name": "keyword.other.vid",

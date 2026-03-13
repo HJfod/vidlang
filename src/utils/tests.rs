@@ -223,13 +223,13 @@ impl DebugAstEq for Expr {
             }
 
             (
-                Expr::Call {
+                Expr::CallOrTuple {
                     target: a_target,
                     args: a_args,
                     op: a_op,
                     span: _
                 },
-                Expr::Call {
+                Expr::CallOrTuple {
                     target: b_target,
                     args: b_args,
                     op: b_op,
@@ -315,14 +315,8 @@ impl DebugAstEq for Expr {
             (Expr::Await(a, _), Expr::Await(b, _)) => a.debug_ast_assert_eq(b, codebase),
 
             (
-                Expr::TyNamed {
-                    name: a_name,
-                    span: _,
-                },
-                Expr::TyNamed {
-                    name: b_name,
-                    span: _,
-                },
+                Expr::TyNamed(a_name),
+                Expr::TyNamed(b_name),
             ) => {
                 a_name.debug_ast_assert_eq(b_name, codebase);
             },

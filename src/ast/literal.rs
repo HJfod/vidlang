@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crate::{
-    ast::{expr::{Expr, FunctionParam, FunctionParamKind, IdentPath, ParseArgs, StringComp}, intrinsics::Intrinsic}, codebase::Codebase, pools::{exprs::ExprId, messages::Message}, tokens::{token::{BracketType, StrLitComp, Symbol, Token}, tokenstream::Tokens,
+    ast::{expr::{Expr, FunctionParam, FunctionParamKind, Ident, IdentPath, ParseArgs, StringComp}, intrinsics::Intrinsic}, codebase::Codebase, pools::{exprs::ExprId, messages::Message}, tokens::{token::{BracketType, StrLitComp, Symbol, Token}, tokenstream::Tokens,
 }};
 
 impl Expr {
@@ -13,6 +13,28 @@ impl Expr {
             res.push(tokens.expect_ident(codebase));
         }
         IdentPath(res, tokens.span_from(start))
+    }
+
+    pub(super) fn parse_tuple_field(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs, field_counter: &mut usize)
+     -> (Ident, ExprId)
+    {
+        if tokens.peek_and_expect_symbol(Symbol::Dot, codebase) {
+            let ident = tokens.expect_ident(codebase);
+            let Some(Token::Symbol(sym, sym_span)) = tokens.next() else {
+                unreachable!("a symbol was previously peeked but tokens.next() did not return one");
+            };
+            if sym == Symbol::Assign {
+                codebase.messages.add(Message::new_error(
+                    "named function args are passed using `arg: value`, not with assignment",
+                    sym_span
+                ));
+            }
+            return (ident, Expr::parse(tokens, codebase, args));
+        }
+        let value = Expr::parse(tokens, codebase, args);
+        let name = codebase.names.tuple_field(*field_counter, codebase.exprs.get(value).span());
+        *field_counter += 1;
+        (name, value)
     }
 
     pub(super) fn parse_value(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
@@ -58,14 +80,21 @@ impl Expr {
             );
         }
 
-        // Parenthesized expression `(something)`
+        // Tuple expression `(a, b)` or `(.a = b, .c = d)`
         if tokens.peek_bracketed(BracketType::Parentheses, codebase) {
             let Token::Bracketed(_, mut sub_tokens, _) = tokens.expect_bracketed(BracketType::Parentheses, codebase) else {
                 unreachable!("tokens.expect_bracketed didnt return Bracketed despite being peeked");
             };
-            let content = Expr::parse(&mut sub_tokens, codebase, args);
-            sub_tokens.expect_empty(codebase);
-            return content;
+            let mut field_counter = 0;
+            let fields = Expr::parse_comma_list(&mut sub_tokens, codebase, args, |tks, cb, ag| {
+                Expr::parse_tuple_field(tks, cb, ag, &mut field_counter)
+            });
+            return codebase.exprs.add(Expr::CallOrTuple {
+                target: None,
+                args: fields,
+                op: None,
+                span: tokens.span_from(start),
+            });
         }
 
         // Intrinsics

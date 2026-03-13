@@ -8,7 +8,7 @@ clip circle(radius: float, color: color) {
 }
 
 clip char(char: string, font: string, color: color) {
-    invoke_intrinsic create_text_chars(char, font)[0]
+    invoke_intrinsic create_text_chars(char, font)[0];
     render = canvas -> invoke_intrinsic render_char(canvas, char, font, color);
 }
 

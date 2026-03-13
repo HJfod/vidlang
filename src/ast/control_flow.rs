@@ -32,7 +32,7 @@ impl Expr {
                 span: tokens.span_from(start)
             }));
         }
-        if tokens.peek_bracketed(BracketType::Brackets, codebase) {
+        if tokens.peek_bracketed(BracketType::Braces, codebase) {
             return Some(Self::parse_block(tokens, codebase, args));
         }
         if tokens.peek_and_expect_symbol(Symbol::Await, codebase) {

@@ -31,6 +31,9 @@ impl Names {
         self.names.resolve(id).expect("Names has handed out an invalid NameId (somehow)")
     }
 
+    pub fn tuple_field(&mut self, num: usize, span: Span) -> Ident {
+        Ident(self.add(&num.to_string()), span)
+    }
     pub fn missing(&mut self) -> NameId {
         self.add("<missing name>")
     }

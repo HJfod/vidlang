@@ -1,52 +1,51 @@
 use crate::{
-    ast::expr::{Expr, Ident, ParseArgs, StructTypeField},
+    ast::expr::{Expr, Ident, IdentPath, ParseArgs, TupleTypeField},
     codebase::Codebase,
     pools::{exprs::ExprId, messages::Message},
     tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
-    fn parse_function_return_type(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> Option<ExprId> {
-        if let Some((sym, span)) = tokens.peek_and_expect_symbol_of(codebase, |sym| matches!(sym, Symbol::Arrow | Symbol::FatArrow)) {
-            if sym == Symbol::FatArrow {
-                codebase.messages.add(Message::new_error(
-                    "function types are defined with `->`, not `=>`",
-                    span
-                ));
-            }
-            return Some(Expr::parse_type(tokens, codebase, args));
-        }
-        None
-    }
-    fn parse_struct_type_field_inner(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> (Ident, Option<ExprId>) {
+    fn parse_tuple_type_field_inner(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs)
+     -> (Ident, Option<ExprId>, Option<ExprId>)
+    {
+        // todo: unnamed fields
         let name = tokens.expect_ident(codebase);
-        if tokens.peek_and_expect_symbol(Symbol::Colon, codebase) ||
-            // Allow writing `field {}` shorthand
-            tokens.peek_bracketed(BracketType::Braces, codebase)
-        {
-            let ty = Expr::parse_type(tokens, codebase, args);
-            return (name, Some(ty));
-        }
-        (name, None)
+        let ty = tokens.peek_and_expect_symbol(Symbol::Colon, codebase)
+            .then(|| Expr::parse_type(tokens, codebase, args));
+        let default_value = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
+            .then(|| Expr::parse(tokens, codebase, args));
+        (name, ty, default_value)
     }
-    fn parse_struct_type_field(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> StructTypeField {
+    fn parse_tuple_type_field(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> TupleTypeField {
         if tokens.peek_and_expect_symbol(Symbol::Enum, codebase) {
             let fields = match tokens.expect_bracketed(BracketType::Braces, codebase) {
                 Token::Bracketed(_, mut fields, _) => Expr::parse_comma_list(
-                    &mut fields, codebase, args, Expr::parse_struct_type_field_inner
+                    &mut fields, codebase, args, |tks, cb, ag| {
+                        let (name, ty, def) = Expr::parse_tuple_type_field_inner(tks, cb, ag);
+                        if let Some(def) = def {
+                            cb.messages.add(Message::new_error(
+                                "enum fields may not have default values",
+                                cb.exprs.get(def).span()
+                            ));
+                        }
+                        (name, ty)
+                    }
                 ),
                 _ => vec![],
             };
-            return StructTypeField::Enum(fields);
+            return TupleTypeField::Enum(fields);
         }
-        let (name, ty) = Expr::parse_struct_type_field_inner(tokens, codebase, args);
+        let (name, ty, def) = Expr::parse_tuple_type_field_inner(tokens, codebase, args);
         let name_span = name.1;
         if ty.is_none() {
             codebase.messages.add(Message::new_error("non-enum fields must have an explicit type", name_span));
         }
-        StructTypeField::Field(name, ty.unwrap_or_else(
-            || codebase.exprs.add(Expr::Ident(codebase.names.missing_path(name_span)))
-        ))
+        TupleTypeField::Field(
+            name,
+            ty.unwrap_or_else(|| codebase.exprs.add(Expr::Ident(codebase.names.missing_path(name_span)))),
+            def
+        )
     }
 
     fn parse_type_inner(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
@@ -61,51 +60,13 @@ impl Expr {
             return codebase.exprs.add(Expr::TyArray { inner, span: tokens.span_from(start) });
         }
 
-        // Object types `{ x: A, enum { y: B, z: C } }`
-        if tokens.peek_bracketed(BracketType::Braces, codebase) {
-            let Token::Bracketed(_, mut content, _) = tokens.expect_bracketed(BracketType::Braces, codebase) else {
-                panic!("peek_bracketed returned true but expect_bracketed didn't");
-            };
-            let fields = Expr::parse_comma_list(&mut content, codebase, args, Expr::parse_struct_type_field);
-            return codebase.exprs.add(Expr::TyObject { fields, span: tokens.span_from(start) });
-        }
-
-        // Function types `(A, B) -> C`
-        if tokens.peek_bracketed(BracketType::Parentheses, codebase) &&
-            tokens.peek_n(1).is_some_and(|s| matches!(s, Token::Symbol(Symbol::Arrow, _)))
-        {
-            let Token::Bracketed(_, mut content, _) = tokens.expect_bracketed(BracketType::Parentheses, codebase) else {
-                panic!("peek_bracketed returned true but expect_bracketed didn't");
-            };
-            let params = Expr::parse_comma_list(&mut content, codebase, args, Expr::parse_type);
-            let return_ty = match Expr::parse_function_return_type(tokens, codebase, args) {
-                Some(ret) => ret,
-                None => {
-                    let span = tokens.last_span().next_ch();
-                    codebase.messages.add(
-                        Message::new_error("expected return type for function", span)
-                            .with_note("Vid does not have unnamed tuple types; \
-                                use objects with named variants instead", None)
-                    );
-                    codebase.exprs.add(Expr::TyNamed {
-                        name: Ident(codebase.names.missing(), span),
-                        span,
-                    })
-                }
-            };
-            return codebase.exprs.add(Expr::TyFunction {
-                params,
-                return_ty,
-                span: tokens.span_from(start)
-            });
-        }
-
-        // Parenthesized type expressions `(Thing)`
+        // Tuple types `(x: A, enum { y: B, z: C })` (and also function parameters!)
         if tokens.peek_bracketed(BracketType::Parentheses, codebase) {
             let Token::Bracketed(_, mut content, _) = tokens.expect_bracketed(BracketType::Parentheses, codebase) else {
                 panic!("peek_bracketed returned true but expect_bracketed didn't");
             };
-            return Expr::parse_type(&mut content, codebase, args);
+            let fields = Expr::parse_comma_list(&mut content, codebase, args, Expr::parse_tuple_type_field);
+            return codebase.exprs.add(Expr::TyTuple { fields, span: tokens.span_from(start) });
         }
 
         // Typeof
@@ -114,9 +75,22 @@ impl Expr {
             return codebase.exprs.add(Expr::TypeOf { eval, span: tokens.span_from(start) });
         }
 
+        // Shorthand for clip and effect types via `clip name` syntax 
+        // which is (shorthand for `name::Return`)
+        if tokens.peek_and_expect_symbol_of(codebase, |sym| matches!(sym, Symbol::Clip | Symbol::Effect)).is_some() {
+            let name = Expr::parse_ident_path(tokens, codebase, args);
+            let span = name.1;
+            let from = codebase.exprs.add(Expr::TyNamed(name));
+            return codebase.exprs.add(Expr::TyAccess {
+                from,
+                item: IdentPath(vec![Ident(codebase.names.add("Return"), span)], span),
+                span,
+            });
+        }
+
         // Normal named type
-        let name = tokens.expect_ident(codebase);
-        codebase.exprs.add(Expr::TyNamed { name, span: tokens.span_from(start) })
+        let name = Expr::parse_ident_path(tokens, codebase, args);
+        codebase.exprs.add(Expr::TyNamed(name))
     }
 
     pub(super) fn parse_type(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
@@ -156,12 +130,17 @@ impl Expr {
                 continue;
             }
 
-            // Function types (yes these are parsed in two different places, 
-            // but that's because I could not figure out any better way to 
-            // support both `A -> B` and `(A, B) -> C`
-            if let Some(return_ty) = Expr::parse_function_return_type(tokens, codebase, args) {
+            // Function types `A -> B`
+            if let Some((sym, span)) = tokens.peek_and_expect_symbol_of(codebase, |sym| matches!(sym, Symbol::Arrow | Symbol::FatArrow)) {
+                if sym == Symbol::FatArrow {
+                    codebase.messages.add(Message::new_error(
+                        "function types are defined with `->`, not `=>`",
+                        span
+                    ));
+                }
+                let return_ty = Expr::parse_type(tokens, codebase, args);
                 inner = codebase.exprs.add(Expr::TyFunction {
-                    params: vec![inner],
+                    param: inner,
                     return_ty,
                     span: tokens.span_from(start)
                 });

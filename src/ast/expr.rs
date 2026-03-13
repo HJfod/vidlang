@@ -1,6 +1,6 @@
 
 use crate::{
-    ast::intrinsics::Intrinsic, codebase::{self, Codebase}, pools::{exprs::ExprId, modules::Span, names::NameId}, tokens::{token::{Duration, FloatLitType, Symbol}, tokenstream::Tokens}
+    ast::intrinsics::Intrinsic, codebase::Codebase, pools::{exprs::ExprId, modules::Span, names::NameId}, tokens::{token::{Duration, FloatLitType, Symbol}, tokenstream::Tokens}
 };
 
 #[derive(Debug)]
@@ -78,11 +78,11 @@ pub enum FunctionType {
 }
 
 #[derive(Debug)]
-pub enum StructTypeField {
-    /// Field with a type
-    Field(Ident, ExprId),
+pub enum TupleTypeField {
+    /// Field with a type and an optional default value
+    Field(Ident, ExprId, Option<ExprId>),
     /// Only one of these fields may be active at a time. If type is omitted, 
-    /// then the field receives an unique type
+    /// then the field receives an unique type. May not have a default value
     Enum(Vec<(Ident, Option<ExprId>)>),
 }
 
@@ -137,10 +137,12 @@ pub enum Expr {
         span: Span,
     },
 
-    // `a(b, c: 5)`
-    Call {
-        target: ExprId,
-        args: Vec<(Option<Ident>, ExprId)>,
+    // Tuple literal `(a: 2, b: 5)` or call `a(b, c: 5)`
+    CallOrTuple {
+        target: Option<ExprId>,
+        /// If no field names are provided, then will implicitly give fields 
+        /// numbered names starting from `0`
+        args: Vec<(Ident, ExprId)>,
         op: Option<(Symbol, Span)>,
         span: Span,
     },
@@ -154,6 +156,12 @@ pub enum Expr {
         target: ExprId,
         field: IdentPath,
         optional: bool,
+        span: Span,
+    },
+    // `a[b]`
+    IndexAccess {
+        target: ExprId,
+        index: ExprId,
         span: Span,
     },
     // `a = 5`
@@ -190,17 +198,17 @@ pub enum Expr {
     Block(Vec<ExprId>, Span),
     Await(ExprId, Span),
 
-    TyNamed {
-        name: Ident,
-        span: Span,
-    },
+    /// Simple named type like `std::types::Void`
+    TyNamed(IdentPath),
+    /// Subtype of another type, like `(A -> B)::Return`
     TyAccess {
         from: ExprId,
         item: IdentPath,
         span: Span,
     },
+    /// A function with multiple args simply takes a tuple type as its first arg
     TyFunction {
-        params: Vec<ExprId>,
+        param: ExprId,
         return_ty: ExprId,
         span: Span,
     },
@@ -208,8 +216,8 @@ pub enum Expr {
         inner: ExprId,
         span: Span,
     },
-    TyObject {
-        fields: Vec<StructTypeField>,
+    TyTuple {
+        fields: Vec<TupleTypeField>,
         span: Span,
     },
     TyOptional {
@@ -245,9 +253,10 @@ impl Expr {
             Self::Using { .. } => true,
             Self::TypeDef { ty, .. } => sub_requires(*ty),
 
-            Self::Call { .. } => true,
+            Self::CallOrTuple { .. } => true,
             Self::InvokeIntrinsic { .. } => true,
             Self::FieldAccess { .. } => true,
+            Self::IndexAccess { .. } => true,
             Self::Assign { .. } => true,
             Self::AssignFrom { .. } => false,
             Self::LogicChain { .. } => true,
@@ -258,11 +267,11 @@ impl Expr {
             Self::Block(..) => false,
             Self::Await(value, _) => sub_requires(*value),
 
-            Self::TyNamed { .. } => true,
+            Self::TyNamed(..) => true,
             Self::TyAccess { .. } => true,
             Self::TyFunction { .. } => true,
             Self::TyArray { .. } => true,
-            Self::TyObject { .. } => false,
+            Self::TyTuple { .. } => false,
             Self::TyOptional { .. } => true,
             Self::TypeOf { .. } => true,
         }
@@ -281,9 +290,10 @@ impl Expr {
             Self::Module { span, .. } => *span,
             Self::Using { span, .. } => *span,
             Self::TypeDef { span, .. } => *span,
-            Self::Call { span, .. } => *span,
+            Self::CallOrTuple { span, .. } => *span,
             Self::InvokeIntrinsic { span, .. } => *span,
             Self::FieldAccess { span, .. } => *span,
+            Self::IndexAccess { span, .. } => *span,
             Self::Assign { span, .. } => *span,
             Self::AssignFrom { span, .. } => *span,
             Self::LogicChain { span, .. } => *span,
@@ -292,11 +302,11 @@ impl Expr {
             Self::Yield(_, span) => *span,
             Self::Block(_, span) => *span,
             Self::Await(_, span) => *span,
-            Self::TyNamed { span, .. } => *span,
+            Self::TyNamed(ident) => ident.1,
             Self::TyAccess { span, .. } => *span,
             Self::TyFunction { span, .. } => *span,
             Self::TyArray { span, .. } => *span,
-            Self::TyObject { span, .. } => *span,
+            Self::TyTuple { span, .. } => *span,
             Self::TyOptional { span, .. } => *span,
             Self::TypeOf { span, .. } => *span,
         }
@@ -403,14 +413,14 @@ fn parse() {
             is_const: false,
         }.add_into(&mut codebase),
         Expr::If {
-            clause: Expr::Call {
-                target: Expr::Ident(codebase.names.builtin_binop_name(Symbol::More, Span::zero(id))).add_into(&mut codebase),
+            clause: Expr::CallOrTuple {
+                target: Some(Expr::Ident(codebase.names.builtin_binop_name(Symbol::More, Span::zero(id))).add_into(&mut codebase)),
                 args: vec![
-                    (None, Expr::Ident(IdentPath(
+                    (codebase.names.tuple_field(0, Span::zero(id)), Expr::Ident(IdentPath(
                         vec![Ident(codebase.names.add("x"), Span::zero(id))],
                         Span::zero(id)
                     )).add_into(&mut codebase)),
-                    (None, codebase.exprs.add(Expr::Int(5, Span::zero(id)))),
+                    (codebase.names.tuple_field(1, Span::zero(id)), codebase.exprs.add(Expr::Int(5, Span::zero(id)))),
                 ],
                 op: Some((Symbol::More, Span::zero(id))),
                 span: Span::zero(id)
@@ -421,14 +431,14 @@ fn parse() {
                         vec![Ident(codebase.names.add("x"), Span::zero(id))],
                         Span::zero(id)
                     )).add_into(&mut codebase),
-                    value: Expr::Call {
-                        target: codebase.exprs.add(Expr::Ident(IdentPath(
+                    value: Expr::CallOrTuple {
+                        target: Some(codebase.exprs.add(Expr::Ident(IdentPath(
                             vec![
                                 Ident(codebase.names.add("lib"), Span::zero(id)),
                                 Ident(codebase.names.add("hi_guys"), Span::zero(id)),
                             ],
                             Span::zero(id)
-                        ))),
+                        )))),
                         args: vec![],
                         op: None,
                         span: Span::zero(id)

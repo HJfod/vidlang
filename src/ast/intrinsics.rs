@@ -8,6 +8,13 @@ pub enum Intrinsic {
     // just a NOP that returns its first argument without doing anything
     Invalid,
 
+
+    // Rendering
+    RenderRectangle,
+    RenderCircle,
+    RenderChar,
+    CreateTextChars,
+
     // Math intrinsics
     IntAbs,
     FloatAbs,
