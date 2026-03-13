@@ -1,5 +1,5 @@
 
-effect lerp_to(ref target: float, value: float, time: duration) {
+effect lerp_to(target: prop float, value: float, time: duration) {
     let initial = target;
     target = from current_frame, value, time {
         let progression = std::math::clamp((current_frame - entry_frame) / time, 0, 1);
@@ -7,7 +7,7 @@ effect lerp_to(ref target: float, value: float, time: duration) {
     }
     await time;
 }
-effect lerp_to(ref target: int, value: int, time: duration) {
+effect lerp_to(target: prop int, value: int, time: duration) {
     let initial = target;
     target = from current_frame, value, time {
         let progression = std::math::clamp((current_frame - entry_frame) / time, 0, 1);
@@ -15,9 +15,9 @@ effect lerp_to(ref target: int, value: int, time: duration) {
     }
     await time;
 }
-effect lerp_by(ref target: float, add: float, time: duration) {
+effect lerp_by(target: prop float, add: float, time: duration) {
     await target.lerp_to(target + add, time);
 }
-effect lerp_by(ref target: int, add: int, time: duration) {
+effect lerp_by(target: prop int, add: int, time: duration) {
     await target.lerp_to(target + add, time);
 }

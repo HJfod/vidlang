@@ -1,11 +1,9 @@
 
-effect blur(target: ref clip, size: float) {
+effect blur(target: Clip, size: float) {
+    let original_render = target.render;
+    target.render = canvas -> {
+        let buffer = canvas.copy();
+        original_render(buffer);
+        // todo: impl gaussian blur
+    };
 }
-
-function render(eff: ref effect blur, canvas: ref Canvas) {
-    let new_canvas = clone(canvas);
-    eff.target.render(canvas);
-    // todo: impl gaussian blur
-}
-
-// todo: what if i apply two blurs? what happens then?

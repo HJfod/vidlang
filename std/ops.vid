@@ -28,26 +28,20 @@ function to_duration_from_seconds(value: float) -> duration {
 // would be desirable (and also, what format would it take, and also, if you 
 // really want that then convert the duration into a number first)
 
-type FmtAlignment = {
-    enum {
-        right,
-        middle,
-        left,
-    }
-}
+type FmtAlignment = enum { Right, Middle, Left };
 
 function to_string(value: bool) -> string {
     invoke_intrinsic bool_to_string(value)
 }
 function to_string(
     value: int,
-    pad: { base: string, align: FmtAlignment = { right } }? = none,
+    pad: (base: string, align: FmtAlignment = Right)? = none,
 ) -> string {
     invoke_intrinsic int_to_string(value, pad?.base, pad?.align)
 }
 function to_string(
     value: float,
-    pad: { base: string, align: FmtAlignment = { right } }? = none,
+    pad: (base: string, align: FmtAlignment = Right)? = none,
     precision: int? = none,
 ) -> string {
     invoke_intrinsic float_to_string(value, pad?.base, pad?.align, precision)
@@ -85,7 +79,7 @@ function add(a: duration, b: duration) -> duration {
 function add(a: string, b: string) -> string {
     invoke_intrinsic string_add(a, b)
 }
-function add(a: [Any], b: typeof a) -> typeof a {
+function add(a: [any], b: typeof a) -> typeof a {
     invoke_intrinsic list_join(a, b)
 }
 
@@ -226,6 +220,6 @@ function neq(a: string, b: string) -> bool {
 }
 
 // a[b]
-function index(list: [Any], index: int) -> (typeof list)::Item {
+function index(list: [any], index: int) -> (typeof list)::Item {
     invoke_intrinsic list_index(list, index)
 }

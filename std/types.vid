@@ -1,51 +1,54 @@
 
-type Void = {}
+type Void = ();
+type Any = ();
 
 // Special duration that lasts forever
 // Awaiting this duration is illegal, since it would make the video last 
 // literally forever
 const forever: duration = invoke_intrinsic forever_duration();
 
-// Intrinsic types (here for reference, not actually compiled)
-
-// The special "any" keyword allows specifying that a type may accept any kind of 
-invoke_intrinsic type any {}
-
 // Any awaitable construct
-invoke_intrinsic type awaitable {
+type Awaitable = (
     const total_duration: duration;
     const entry_frame: duration;
-    current_frame: duration;
-}
-invoke_intrinsic type effect {
-    const total_duration: duration;
-    const entry_frame: duration;
-    current_frame: duration;
-}
-invoke_intrinsic type clip {
-    x: float;
-    y: float;
-    scale_x: float;
-    scale_y: float;
-    skew_x: float;
-    skew_y: float;
-    rotation: float;
-    content_width: float;
-    content_height: float;
-}
+    prop current_frame: duration;
+);
+type Effect = Awaitable + ();
+type Clip = Awaitable + (
+    prop x: float;
+    prop y: float;
+    prop scale_x: float;
+    prop scale_y: float;
+    prop skew_x: float;
+    prop skew_y: float;
+    prop rotation: float;
+    prop content_width: float;
+    prop content_height: float;
+    render: (ref Canvas) -> Void = canvas -> {
+        default_render(self, canvas);
+    };
+);
 
 function get_all_child_clips(target: ref clip) -> [clip] {}
 
-type Canvas = {
+type Canvas = (
     width: float;
     height: float;
     pixels: [color];
+);
+
+function copy(canvas: ref Canvas) -> Canvas {
+    Canvas(
+        width  = canvas.width,
+        height = canvas.height,
+        pixels = canvas.pixels,
+    )
 }
 
 // Base rendering implementation for all clips
 // todo: how on earth would this dispatch the correct overload of `render()`??
 // i'm guessing i should hardcode child rendering to be a compiler built-in thing after all...
-function render(target: ref clip, canvas: ref Canvas) {
+function default_render(target: ref clip, canvas: ref Canvas) {
 }
 
 // https://stackoverflow.com/questions/2353211/hsl-to-rgb-color-conversion

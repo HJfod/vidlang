@@ -1,3 +1,6 @@
 
 public using std::list::{ ... };
 public using std::str::{ ... };
+public using std::clips::{ ... };
+public using std::effects::{ ... };
+public using std::ease::{ ... };
