@@ -55,7 +55,8 @@ impl Expr {
                     kind: FunctionParamKind::Normal,
                     name: tokens.expect_ident(codebase),
                     ty: None,
-                    default_value: None
+                    default_value: None,
+                    from: vec![],
                 }]
             }
             else {
@@ -97,6 +98,25 @@ impl Expr {
             });
         }
 
+        // Single-field tuple expression `.a` (for enums)
+        if tokens.peek_and_expect_symbol(Symbol::Dot, codebase) {
+            let ident = tokens.expect_ident(codebase);
+            if tokens.peek_and_expect_symbol(Symbol::Assign, codebase) {
+                let false_value = Expr::parse(tokens, codebase, args);
+                codebase.messages.add(Message::new_error(
+                    "single-field tuple expressions may not specify a value",
+                    codebase.exprs.get(false_value).span()
+                ).with_hint("surround this expression in parentheses", None));
+            }
+            let value = codebase.exprs.add(Expr::DefaultValue(ident.1));
+            return codebase.exprs.add(Expr::CallOrTuple {
+                target: None,
+                args: vec![(ident, value)],
+                op: None,
+                span: tokens.span_from(start),
+            });
+        }
+
         // Intrinsics
         if tokens.peek_and_expect_symbol(Symbol::InvokeIntrinsic, codebase) {
             let intrinsic_ident = tokens.expect_ident(codebase);
@@ -119,6 +139,12 @@ impl Expr {
         }
 
         // Basic literals
+        if tokens.peek_and_expect_symbol(Symbol::None, codebase) {
+            return codebase.exprs.add(Expr::None(tokens.span_from(start)));
+        }
+        if tokens.peek_and_expect_symbol(Symbol::Default, codebase) {
+            return codebase.exprs.add(Expr::DefaultValue(tokens.span_from(start)));
+        }
         if tokens.peek_symbol(Symbol::False, codebase) || tokens.peek_symbol(Symbol::True, codebase) {
             let Some(Token::Symbol(sym, span)) = tokens.next() else {
                 unreachable!("tokens.peek_symbol returned true but next() did not return a symbol");

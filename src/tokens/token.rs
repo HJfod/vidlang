@@ -49,7 +49,7 @@ pub enum Symbol {
     // Keywords
     Let, Const, Type, Function, Effect, Clip, Module,
     Trait, Impl, Struct, Unit, Enum,
-    From,
+    From, Default,
     Using, Private, Public, Ref,
     InvokeIntrinsic,
     #[strum(to_string="typeof")]

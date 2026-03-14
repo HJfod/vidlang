@@ -62,6 +62,7 @@ pub struct FunctionParam {
     pub ty: Option<ExprId>,
     pub default_value: Option<ExprId>,
     pub kind: FunctionParamKind,
+    pub from: Vec<Ident>,
 }
 
 #[derive(Debug)]
@@ -88,12 +89,16 @@ pub enum TupleTypeField {
 
 #[derive(Debug)]
 pub enum Expr {
+    /// The value `none`
+    None(Span),
     Bool(bool, Span),
     Int(u64, Span),
     Float(f64, FloatLitType, Span),
     Duration(Duration, Span),
     String(Vec<StringComp>, Span),
     Ident(IdentPath),
+    /// Default value expression, i.e. just the keyword `default`
+    DefaultValue(Span),
 
     // `let a: B = 5`
     Var {
@@ -239,12 +244,14 @@ impl Expr {
             codebase.exprs.get(id).requires_semicolon(codebase)
         };
         match self {
+            Self::None(..) => true,
             Self::Bool(..) => true,
             Self::Int(..) => true,
             Self::Float(..) => true,
             Self::Duration(..) => true,
             Self::String(..) => true,
             Self::Ident(..) => true,
+            Self::DefaultValue(..) => true,
 
             Self::Var { .. } => true,
             Self::Function { body, .. } => sub_requires(*body),
@@ -271,19 +278,21 @@ impl Expr {
             Self::TyAccess { .. } => true,
             Self::TyFunction { .. } => true,
             Self::TyArray { .. } => true,
-            Self::TyTuple { .. } => false,
+            Self::TyTuple { .. } => true,
             Self::TyOptional { .. } => true,
             Self::TypeOf { .. } => true,
         }
     }
     pub fn span(&self) -> Span {
         match self {
+            Self::None(span) => *span,
             Self::Bool(_, span) => *span,
             Self::Int(_, span) => *span,
             Self::Float(_, _, span) => *span,
             Self::Duration(_, span) => *span,
             Self::String(_, span) => *span,
             Self::Ident(ident) => ident.1,
+            Self::DefaultValue(span) => *span,
             Self::Var { span, .. } => *span,
             Self::Function { span, .. } => *span,
             Self::ArrowFunction { span, .. } => *span,

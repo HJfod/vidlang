@@ -6,27 +6,24 @@ use crate::{
 };
 
 impl Expr {
-    fn parse_tuple_type_field_inner(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs)
-     -> (Ident, Option<ExprId>, Option<ExprId>)
-    {
-        // todo: unnamed fields
-        let name = tokens.expect_ident(codebase);
-        let ty = tokens.peek_and_expect_symbol(Symbol::Colon, codebase)
-            .then(|| Expr::parse_type(tokens, codebase, args));
-        let default_value = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
-            .then(|| Expr::parse(tokens, codebase, args));
-        (name, ty, default_value)
-    }
-    fn parse_tuple_type_field(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> TupleTypeField {
+    fn parse_tuple_type_field(
+        tokens: &mut Tokens,
+        codebase: &mut Codebase,
+        args: ParseArgs,
+        field_counter: &mut usize
+    ) -> TupleTypeField {
         if tokens.peek_and_expect_symbol(Symbol::Enum, codebase) {
             let fields = match tokens.expect_bracketed(BracketType::Braces, codebase) {
                 Token::Bracketed(_, mut fields, _) => Expr::parse_comma_list(
-                    &mut fields, codebase, args, |tks, cb, ag| {
-                        let (name, ty, def) = Expr::parse_tuple_type_field_inner(tks, cb, ag);
-                        if let Some(def) = def {
+                    &mut fields, codebase, args, |tks, cb, args| {
+                        let name = tks.expect_ident(cb);
+                        let ty = tks.peek_and_expect_symbol(Symbol::Colon, cb)
+                            .then(|| Expr::parse_type(tks, cb, args));
+                        if tks.peek_and_expect_symbol(Symbol::Assign, cb) {
+                            let false_value = Expr::parse(tks, cb, args);
                             cb.messages.add(Message::new_error(
                                 "enum fields may not have default values",
-                                cb.exprs.get(def).span()
+                                cb.exprs.get(false_value).span()
                             ));
                         }
                         (name, ty)
@@ -36,16 +33,24 @@ impl Expr {
             };
             return TupleTypeField::Enum(fields);
         }
-        let (name, ty, def) = Expr::parse_tuple_type_field_inner(tokens, codebase, args);
-        let name_span = name.1;
-        if ty.is_none() {
-            codebase.messages.add(Message::new_error("non-enum fields must have an explicit type", name_span));
+        // If we're peeking `a: B` then parse name, otherwise parse unnamed field
+        let name;
+        let ty;
+        if tokens.peek_ident(codebase) && 
+            tokens.peek_n(1).is_some_and(|t| matches!(t, Token::Symbol(Symbol::Colon, _)))
+        {
+            name = tokens.expect_ident(codebase);
+            tokens.peek_and_expect_symbol(Symbol::Colon, codebase);
+            ty = Expr::parse_type(tokens, codebase, args);
         }
-        TupleTypeField::Field(
-            name,
-            ty.unwrap_or_else(|| codebase.exprs.add(Expr::Ident(codebase.names.missing_path(name_span)))),
-            def
-        )
+        else {
+            ty = Expr::parse_type(tokens, codebase, args);
+            name = codebase.names.tuple_field(*field_counter, codebase.exprs.get(ty).span());
+            *field_counter += 1;
+        };
+        let def = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
+            .then(|| Expr::parse(tokens, codebase, args));
+        TupleTypeField::Field(name, ty, def)
     }
 
     fn parse_type_inner(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
@@ -65,8 +70,18 @@ impl Expr {
             let Token::Bracketed(_, mut content, _) = tokens.expect_bracketed(BracketType::Parentheses, codebase) else {
                 panic!("peek_bracketed returned true but expect_bracketed didn't");
             };
-            let fields = Expr::parse_comma_list(&mut content, codebase, args, Expr::parse_tuple_type_field);
+            let mut field_counter = 0;
+            let fields = Expr::parse_comma_list(&mut content, codebase, args, |tks, cb, ag| {
+                Expr::parse_tuple_type_field(tks, cb, ag, &mut field_counter)
+            });
             return codebase.exprs.add(Expr::TyTuple { fields, span: tokens.span_from(start) });
+        }
+
+        // Shorthand for tuples with just one enum member
+        if tokens.peek_symbol(Symbol::Enum, codebase) {
+            let mut field_counter = 0;
+            let field = Expr::parse_tuple_type_field(tokens, codebase, args, &mut field_counter);
+            return codebase.exprs.add(Expr::TyTuple { fields: vec![field], span: tokens.span_from(start) });
         }
 
         // Typeof

@@ -20,9 +20,26 @@ impl Expr {
         let name = tokens.expect_ident(codebase);
         let ty = tokens.peek_and_expect_symbol(Symbol::Colon, codebase)
             .then(|| Expr::parse_type(tokens, codebase, args));
+        
+        let mut from = vec![];
+        if tokens.peek_and_expect_symbol(Symbol::From, codebase) {
+            while tokens.peek_ident(codebase) {
+                from.push(tokens.expect_ident(codebase));
+                if !tokens.peek_and_expect_symbol(Symbol::Comma, codebase) {
+                    break;
+                }
+            }
+            if from.is_empty() {
+                codebase.messages.add(Message::new_error(
+                    "at least one dependent property name must be listed after the from-keyword",
+                    tokens.last_span()
+                ));
+            }
+        }
+
         let default_value = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
             .then(|| Expr::parse(tokens, codebase, args));
-        FunctionParam { kind, name, ty, default_value }
+        FunctionParam { kind, name, ty, default_value, from }
     }
 
     fn parse_using_item_path(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> UsingIdentPath {
@@ -160,11 +177,11 @@ impl Expr {
                         ));
                         return None;
                     }
-                    Some(Expr::parse(tokens, codebase, args))
+                    Some(Expr::parse_type(tokens, codebase, args))
                 })
                 .flatten();
 
-            // Clips have special wacky types
+            // Clips and effects have special wacky types
             if let Some(ref ret) = return_ty && sym != Symbol::Function {
                 codebase.messages.add(Message::new_error(
                     "clips and effects may not have explicit return types",
@@ -172,13 +189,7 @@ impl Expr {
                 ));
             }
 
-            // Shorthand syntax `f() => expr`
-            let body = if tokens.peek_and_expect_symbol(Symbol::FatArrow, codebase) {
-                Expr::parse(tokens, codebase, args)
-            }
-            else {
-                Expr::parse_block(tokens, codebase, args)
-            };
+            let body = Expr::parse_block(tokens, codebase, args);
             return Some(codebase.exprs.add(Expr::Function {
                 visibility: visibility.unwrap_or(Visibility::Public),
                 ty: match sym {

@@ -79,7 +79,7 @@ function add(a: duration, b: duration) -> duration {
 function add(a: string, b: string) -> string {
     invoke_intrinsic string_add(a, b)
 }
-function add(a: [any], b: typeof a) -> typeof a {
+function add(a: [Any], b: typeof a) -> typeof a {
     invoke_intrinsic list_join(a, b)
 }
 
