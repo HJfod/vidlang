@@ -54,7 +54,7 @@ fn compile_examples() {
     
     let mut codebase = Codebase::new();
     add_pkg_or_panic(&mut codebase, &dir.join("std"));
-    add_pkg_or_panic(&mut codebase, &dir.join("examples"));
+    add_pkg_or_panic(&mut codebase, &dir.join("examples/basic"));
     codebase.parse_all(ParseArgs::default());
 
     assert!(codebase.messages.count_total() == 0, "{:?}", codebase.messages);

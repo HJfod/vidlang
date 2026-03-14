@@ -18,16 +18,19 @@ impl Expr {
     pub(super) fn parse_tuple_field(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs, field_counter: &mut usize)
      -> (Ident, ExprId)
     {
+        // Named field `.a = b`
         if tokens.peek_and_expect_symbol(Symbol::Dot, codebase) {
             let ident = tokens.expect_ident(codebase);
-            let Some(Token::Symbol(sym, sym_span)) = tokens.next() else {
-                unreachable!("a symbol was previously peeked but tokens.next() did not return one");
-            };
-            if sym == Symbol::Assign {
+            // Fallback parsing for `a: b`
+            if tokens.peek_and_expect_symbol(Symbol::Colon, codebase) {
                 codebase.messages.add(Message::new_error(
-                    "named function args are passed using `arg: value`, not with assignment",
-                    sym_span
+                    "named function args are passed using `arg = value`, not with colons",
+                    tokens.last_span()
                 ));
+            }
+            // Correct parsing
+            else {
+                tokens.expect_symbol(Symbol::Assign, codebase);
             }
             return (ident, Expr::parse(tokens, codebase, args));
         }

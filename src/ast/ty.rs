@@ -34,6 +34,7 @@ impl Expr {
             return TupleTypeField::Enum(fields);
         }
         // If we're peeking `a: B` then parse name, otherwise parse unnamed field
+        let is_const = tokens.peek_and_expect_symbol(Symbol::Const, codebase);
         let name;
         let ty;
         if tokens.peek_ident(codebase) && 
@@ -48,9 +49,9 @@ impl Expr {
             name = codebase.names.tuple_field(*field_counter, codebase.exprs.get(ty).span());
             *field_counter += 1;
         };
-        let def = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
+        let default = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
             .then(|| Expr::parse(tokens, codebase, args));
-        TupleTypeField::Field(name, ty, def)
+        TupleTypeField::Field { is_const, name, ty, default }
     }
 
     fn parse_type_inner(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
@@ -88,6 +89,12 @@ impl Expr {
         if tokens.peek_and_expect_symbol(Symbol::TypeOf, codebase) {
             let eval = Expr::parse(tokens, codebase, args);
             return codebase.exprs.add(Expr::TypeOf { eval, span: tokens.span_from(start) });
+        }
+
+        // Ref
+        if tokens.peek_and_expect_symbol(Symbol::Ref, codebase) {
+            let inner = Expr::parse_type(tokens, codebase, args);
+            return codebase.exprs.add(Expr::TyRef { inner, span: tokens.span_from(start) });
         }
 
         // Shorthand for clip and effect types via `clip name` syntax 
@@ -162,6 +169,16 @@ impl Expr {
                 continue;
             }
 
+            // Join types `A + B`
+            if tokens.peek_and_expect_symbol(Symbol::Plus, codebase) {
+                let rhs = Expr::parse_type(tokens, codebase, args);
+                inner = codebase.exprs.add(Expr::TyJoin {
+                    lhs: inner,
+                    rhs,
+                    span: tokens.span_from(start)
+                });
+            }
+
             break;
         }
 
@@ -179,16 +196,16 @@ fn type_parse() {
         let z: S?;
         let a: typeof b;
         let b: (typeof y)::Item;
-        let c: {
+        let c: (
             x: int,
             y: float,
-            z { carol: bool },
+            z: (carol: bool),
             enum {
                 john,
                 steve,
                 caroline: int,
             }
-        }
+        );
     "#);
     codebase.parse_all(ParseArgs {
         allow_non_definitions_at_root: true,

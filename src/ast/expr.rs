@@ -49,8 +49,6 @@ pub enum LogicChainType {
 pub enum FunctionParamKind {
     /// Ordinary function param that is passed by ownership / copy
     Normal,
-    /// Function param that is passed by (mutable) reference
-    Ref,
     /// Constant property (only allowed in functions whose parameters are 
     /// properties, aka clips & effects)
     Const,
@@ -81,7 +79,12 @@ pub enum FunctionType {
 #[derive(Debug)]
 pub enum TupleTypeField {
     /// Field with a type and an optional default value
-    Field(Ident, ExprId, Option<ExprId>),
+    Field {
+        is_const: bool,
+        name: Ident,
+        ty: ExprId,
+        default: Option<ExprId>
+    },
     /// Only one of these fields may be active at a time. If type is omitted, 
     /// then the field receives an unique type. May not have a default value
     Enum(Vec<(Ident, Option<ExprId>)>),
@@ -229,6 +232,16 @@ pub enum Expr {
         inner: ExprId,
         span: Span,
     },
+    TyRef {
+        inner: ExprId,
+        span: Span,
+    },
+    /// Join two types together via `A + B` (results in a new tuple `(A, B)`)
+    TyJoin {
+        lhs: ExprId,
+        rhs: ExprId,
+        span: Span,
+    },
     TypeOf {
         eval: ExprId,
         span: Span,
@@ -280,7 +293,52 @@ impl Expr {
             Self::TyArray { .. } => true,
             Self::TyTuple { .. } => true,
             Self::TyOptional { .. } => true,
+            Self::TyRef { .. } => true,
+            Self::TyJoin { .. } => true,
             Self::TypeOf { .. } => true,
+        }
+    }
+    pub fn is_stmt_like(&self) -> bool {
+        match self {
+            Self::None(..) => false,
+            Self::Bool(..) => false,
+            Self::Int(..) => false,
+            Self::Float(..) => false,
+            Self::Duration(..) => false,
+            Self::String(..) => false,
+            Self::Ident(..) => false,
+            Self::DefaultValue(..) => false,
+
+            Self::Var { .. } => true,
+            Self::Function { .. } => true,
+            Self::ArrowFunction { .. } => true,
+            Self::Module { .. } => true,
+            Self::Using { .. } => true,
+            Self::TypeDef { .. } => true,
+
+            Self::CallOrTuple { .. } => false,
+            Self::InvokeIntrinsic { .. } => false,
+            Self::FieldAccess { .. } => false,
+            Self::IndexAccess { .. } => false,
+            Self::Assign { .. } => true,
+            Self::AssignFrom { .. } => true,
+            Self::LogicChain { .. } => false,
+
+            Self::If { .. } => false,
+            Self::Return(..) => false,
+            Self::Yield(..) => false,
+            Self::Block(..) => false,
+            Self::Await(..) => false,
+
+            Self::TyNamed(..) => false,
+            Self::TyAccess { .. } => false,
+            Self::TyFunction { .. } => false,
+            Self::TyArray { .. } => false,
+            Self::TyTuple { .. } => false,
+            Self::TyOptional { .. } => false,
+            Self::TyRef { .. } => false,
+            Self::TyJoin { .. } => false,
+            Self::TypeOf { .. } => false,
         }
     }
     pub fn span(&self) -> Span {
@@ -317,6 +375,8 @@ impl Expr {
             Self::TyArray { span, .. } => *span,
             Self::TyTuple { span, .. } => *span,
             Self::TyOptional { span, .. } => *span,
+            Self::TyRef { span, .. } => *span,
+            Self::TyJoin { span, .. } => *span,
             Self::TypeOf { span, .. } => *span,
         }
     }
@@ -400,12 +460,12 @@ fn parse() {
     let (mut codebase, id) = Codebase::new_with_test_package("test_parse", r#"
         let x = 8;
         if x > 5 {
-            ((x)) += lib::hi_guys();
+            x += lib::hi_guys();
         }
     "#);
     codebase.parse_all(ParseArgs {
         allow_non_definitions_at_root: true,
-        ..Default::default()
+        add_std_prelude_import: false,
     });
     assert_eq!(
         codebase.messages.count_total(), 0,

@@ -9,32 +9,32 @@ const forever: duration = invoke_intrinsic forever_duration();
 
 // Any awaitable construct
 type Awaitable = (
-    const total_duration: duration;
-    const entry_frame: duration;
-    current_frame: duration;
+    const total_duration: duration,
+    const entry_frame: duration,
+    current_frame: duration,
 );
 type Effect = Awaitable + ();
 type Clip = Awaitable + (
-    x: float;
-    y: float;
-    scale_x: float;
-    scale_y: float;
-    skew_x: float;
-    skew_y: float;
-    rotation: float;
-    content_width: float;
-    content_height: float;
+    x: float,
+    y: float,
+    scale_x: float,
+    scale_y: float,
+    skew_x: float,
+    skew_y: float,
+    rotation: float,
+    content_width: float,
+    content_height: float,
     render: (ref Canvas) -> Void = canvas -> {
         default_render(self, canvas);
-    };
+    },
 );
 
 function get_all_child_clips(target: ref Clip) -> [Clip] {}
 
 type Canvas = (
-    width: float;
-    height: float;
-    pixels: [color];
+    width: float,
+    height: float,
+    pixels: [color],
 );
 
 function copy(canvas: ref Canvas) -> Canvas {
@@ -54,22 +54,34 @@ function default_render(target: ref Clip, canvas: ref Canvas) {
 // https://stackoverflow.com/questions/2353211/hsl-to-rgb-color-conversion
 
 private function hue_to_rgb(p: float, q: float, t: float) -> float {
-    if (t < 0.0) t += 1;
-    if (t > 1.0) t -= 1;
-    if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
-    if (t < 1.0/2.0) return q;
-    if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+    if t < 0.0 {
+        t += 1;
+    }
+    if t > 1.0 {
+        t -= 1;
+    }
+    if t < 1.0 / 6.0 {
+        return p + (q - p) * 6.0 * t;
+    }
+    if t < 1.0 / 2.0 {
+        return q;
+    }
+    if t < 2.0 / 3.0 {
+        return p + (q - p) * (2.0/3.0 - t) * 6.0;
+    }
     return p;
 }
 function hsl(h: float, s: float, l: float) -> color {
     let r: float;
     let g: float;
     let b: float;
-    if (s == 0) {
-        r = g = b = l;
+    if s == 0 {
+        r = l;
+        g = l;
+        b = l;
     }
     else {
-        const q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+        const q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
         const p = 2.0 * l - q;
         r = hueToRgb(p, q, h + 1.0/3.0);
         g = hueToRgb(p, q, h);

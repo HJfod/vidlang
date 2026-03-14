@@ -1,22 +1,21 @@
 
 use crate::{
-    ast::expr::{Expr, FunctionParam, FunctionParamKind, FunctionType, IdentPath, ParseArgs, UsingIdentItem, UsingIdentPath, Visibility}, codebase::Codebase, pools::{exprs::ExprId, messages::Message}, tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
+    ast::expr::{Expr, FunctionParam, FunctionParamKind, FunctionType, IdentPath, ParseArgs, UsingIdentItem, UsingIdentPath, Visibility},
+    codebase::Codebase,
+    pools::{exprs::ExprId, messages::Message},
+    tokens::{token::{BracketType, Symbol, Token}, tokenstream::Tokens}
 };
 
 impl Expr {
     pub(super) fn parse_function_param(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs)
      -> FunctionParam
     {
-        let kind;
-        if tokens.peek_and_expect_symbol(Symbol::Ref, codebase) {
-            kind = FunctionParamKind::Ref;
-        }
-        else if tokens.peek_and_expect_symbol(Symbol::Const, codebase) {
-            kind = FunctionParamKind::Const;
+        let kind = if tokens.peek_and_expect_symbol(Symbol::Const, codebase) {
+            FunctionParamKind::Const
         }
         else {
-            kind = FunctionParamKind::Normal;
-        }
+            FunctionParamKind::Normal
+        };
         let name = tokens.expect_ident(codebase);
         let ty = tokens.peek_and_expect_symbol(Symbol::Colon, codebase)
             .then(|| Expr::parse_type(tokens, codebase, args));
@@ -287,8 +286,8 @@ fn parse_arrow_function() {
     use crate::ast::expr::ParseArgs;
 
     let (mut codebase, _) = Codebase::new_with_test_package("parse_arrow_function", r#"
-        let x = (a, b) => a + b;
-        let y = a => a;
+        let x = (a, b) -> a + b;
+        let y = a -> a;
     "#);
     codebase.parse_all(ParseArgs {
         allow_non_definitions_at_root: true,
