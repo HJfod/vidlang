@@ -37,7 +37,7 @@ impl Expr {
         }
 
         let default_value = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
-            .then(|| Expr::parse(tokens, codebase, args));
+            .then(|| Expr::parse_expr(tokens, codebase, args));
         FunctionParam { kind, name, ty, default_value, from }
     }
 
@@ -245,7 +245,7 @@ impl Expr {
             let ty = tokens.peek_and_expect_symbol(Symbol::Colon, codebase)
                 .then(|| Expr::parse_type(tokens, codebase, args));
             let value = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
-                .then(|| Expr::parse(tokens, codebase, args));
+                .then(|| Expr::parse_expr(tokens, codebase, args));
             return Some(codebase.exprs.add(Expr::Var {
                 visibility: visibility.unwrap_or(if is_const { Visibility::Public } else { Visibility::Private }),
                 name, ty, value,
@@ -264,20 +264,6 @@ impl Expr {
         }
         
         None
-    }
-    pub(super) fn parse_definition(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
-        match Self::try_parse_definition(tokens, codebase, args) {
-            Some(v) => v,
-            None => {
-                let start = tokens.start();
-                // They probably tried to write an expr, so parsing one should 
-                // result in less errors overall
-                let bad_expr = Expr::parse(tokens, codebase, args);
-                let span = tokens.span_from(start);
-                codebase.messages.add(Message::new_error("only definitions may appear here", span));
-                bad_expr
-            }
-        }
     }
 }
 

@@ -20,7 +20,7 @@ impl Expr {
                         let ty = tks.peek_and_expect_symbol(Symbol::Colon, cb)
                             .then(|| Expr::parse_type(tks, cb, args));
                         if tks.peek_and_expect_symbol(Symbol::Assign, cb) {
-                            let false_value = Expr::parse(tks, cb, args);
+                            let false_value = Expr::parse_expr(tks, cb, args);
                             cb.messages.add(Message::new_error(
                                 "enum fields may not have default values",
                                 cb.exprs.get(false_value).span()
@@ -50,7 +50,7 @@ impl Expr {
             *field_counter += 1;
         };
         let default = tokens.peek_and_expect_symbol(Symbol::Assign, codebase)
-            .then(|| Expr::parse(tokens, codebase, args));
+            .then(|| Expr::parse_expr(tokens, codebase, args));
         TupleTypeField::Field { is_const, name, ty, default }
     }
 
@@ -87,7 +87,7 @@ impl Expr {
 
         // Typeof
         if tokens.peek_and_expect_symbol(Symbol::TypeOf, codebase) {
-            let eval = Expr::parse(tokens, codebase, args);
+            let eval = Expr::parse_expr(tokens, codebase, args);
             return codebase.exprs.add(Expr::TypeOf { eval, span: tokens.span_from(start) });
         }
 

@@ -14,7 +14,7 @@ impl Expr {
         args: ParseArgs,
     ) -> Vec<ExprId> {
         let mut list = Vec::new();
-        let parse = if only_definitions { Expr::parse_definition } else { Expr::parse };
+        let parse = if only_definitions { Expr::parse_stmt } else { Expr::parse_expr_or_stmt };
         while tokens.peek().is_some() {
             let mut expr = parse(tokens, codebase, args);
             let requires_semicolon = codebase.exprs.get(expr).requires_semicolon(codebase);

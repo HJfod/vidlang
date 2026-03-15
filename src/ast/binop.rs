@@ -20,17 +20,6 @@ impl Expr {
         };
         codebase.exprs.add(call)
     }
-    /// Add an error if `expr` is "statement-like" (aka a definition); these 
-    /// may not be followed by unary or binary operators
-    fn error_if_stmt_like(expr: ExprId, codebase: &mut Codebase) {
-        let expr = codebase.exprs.get(expr);
-        if expr.is_stmt_like() {
-            codebase.messages.add(Message::new_error(
-                "operators are not permitted to be used with definitions",
-                expr.span()
-            ).with_hint("if you really meant to do this, enclose the definition in parentheses", None));
-        }
-    }
 
     pub(super) fn parse_from_expr(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs)
      -> (Vec<Ident>, ExprId)
@@ -65,6 +54,10 @@ impl Expr {
             return cf;
         }
         if let Some(d) = Expr::try_parse_definition(tokens, codebase, args) {
+            codebase.messages.add(Message::new_error(
+                "definitions are not allowed here",
+                codebase.exprs.get(d).span()
+            ));
             return d;
         }
         // Check for false from expressions (`from <ident>` or `from { .. }`)
@@ -134,7 +127,6 @@ impl Expr {
         loop {
             // Calls
             if tokens.peek_bracketed(BracketType::Parentheses, codebase) {
-                Expr::error_if_stmt_like(expr, codebase);
                 let Token::Bracketed(_, mut args_tokens, _) = 
                     tokens.expect_bracketed(BracketType::Parentheses, codebase)
                 else {
@@ -155,13 +147,12 @@ impl Expr {
             
             // Indexes
             if tokens.peek_bracketed(BracketType::Brackets, codebase) {
-                Expr::error_if_stmt_like(expr, codebase);
                 let Token::Bracketed(_, mut args_tokens, _) = 
                     tokens.expect_bracketed(BracketType::Brackets, codebase)
                 else {
                     unreachable!("tokens.peek_bracketed returned true but expect_bracketed did not return Bracketed");
                 };
-                let index = Expr::parse(&mut args_tokens, codebase, args);
+                let index = Expr::parse_expr(&mut args_tokens, codebase, args);
                 args_tokens.expect_empty(codebase);
                 expr = codebase.exprs.add(Expr::IndexAccess {
                     target: expr,
@@ -175,7 +166,6 @@ impl Expr {
             if let Some((sym, _)) = tokens.peek_and_expect_symbol_of(
                 codebase, |t| matches!(t, Symbol::Dot | Symbol::QuestionDot)
             ) {
-                Expr::error_if_stmt_like(expr, codebase);
                 let field_name = Expr::parse_ident_path(tokens, codebase, args);
                 expr = codebase.exprs.add(Expr::FieldAccess {
                     target: expr,
@@ -192,7 +182,6 @@ impl Expr {
         // (this binds less tightly than the result of a suffix, since 
         // `-func() == -(func())`)
         if let Some((op, func_name)) = unary_op {
-            Expr::error_if_stmt_like(expr, codebase);
             let call = Expr::CallOrTuple {
                 args: vec![(codebase.names.tuple_field(0, codebase.exprs.get(expr).span()), expr)],
                 op: Some((op, func_name.1)),
@@ -208,7 +197,6 @@ impl Expr {
         let start = tokens.start();
         let mut lhs = Expr::parse_unop(tokens, codebase, args);
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(codebase, |sym| sym == Symbol::Power) {
-            Expr::error_if_stmt_like(lhs, codebase);
             let rhs = Expr::parse_unop(tokens, codebase, args);
 
             // Check if LHS is an unary prefix operator, and issue a warning 
@@ -239,7 +227,6 @@ impl Expr {
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(
             codebase, |sym| matches!(sym, Symbol::Mul | Symbol::Div | Symbol::Mod)
         ) {
-            Expr::error_if_stmt_like(lhs, codebase);
             let rhs = Expr::parse_binop_power(tokens, codebase, args);
             lhs = Expr::make_binop_expr(codebase, op, span, lhs, rhs, tokens.span_from(start));
         }
@@ -251,7 +238,6 @@ impl Expr {
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(
             codebase, |sym| matches!(sym, Symbol::Plus | Symbol::Minus)
         ) {
-            Expr::error_if_stmt_like(lhs, codebase);
             let rhs = Expr::parse_binop_mul(tokens, codebase, args);
             lhs = Expr::make_binop_expr(codebase, op, span, lhs, rhs, tokens.span_from(start));
         }
@@ -264,7 +250,6 @@ impl Expr {
 
         let mut found_one = false;
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(codebase, is_eq_sym) {
-            Expr::error_if_stmt_like(lhs, codebase);
             let rhs = Expr::parse_binop_sum(tokens, codebase, args);
 
             // We're only allowing one equality / comparison operator per binop 
@@ -291,14 +276,12 @@ impl Expr {
 
         let is_logic_chain_sym = |sym| matches!(sym, Symbol::And | Symbol::Or);
         if let Some((orig_sym, _)) = tokens.peek_and_expect_symbol_of(codebase, is_logic_chain_sym) {
-            Expr::error_if_stmt_like(first, codebase);
             let second = Expr::parse_binop_eq(tokens, codebase, args);
             let mut values = vec![first, second];
 
             // Parse the rest of the chain
             while let Some((next, span)) = tokens.peek_and_expect_symbol_of(codebase, is_logic_chain_sym) {
                 let n = Expr::parse_binop_eq(tokens, codebase, args);
-                Expr::error_if_stmt_like(n, codebase);
                 values.push(n);
                 if next != orig_sym {
                     codebase.messages.add(
@@ -327,9 +310,6 @@ impl Expr {
 
         let mut found_one = false;
         while let Some((op, span)) = tokens.peek_and_expect_symbol_of(codebase, is_ass_sym) {
-            if !found_one {
-                Expr::error_if_stmt_like(lhs, codebase);
-            }
             if found_one {
                 codebase.messages.add(
                     Message::new_error("only one assignment operator may be used at once", span)

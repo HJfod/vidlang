@@ -32,9 +32,9 @@ impl Expr {
             else {
                 tokens.expect_symbol(Symbol::Assign, codebase);
             }
-            return (ident, Expr::parse(tokens, codebase, args));
+            return (ident, Expr::parse_expr(tokens, codebase, args));
         }
-        let value = Expr::parse(tokens, codebase, args);
+        let value = Expr::parse_expr(tokens, codebase, args);
         let name = codebase.names.tuple_field(*field_counter, codebase.exprs.get(value).span());
         *field_counter += 1;
         (name, value)
@@ -78,7 +78,7 @@ impl Expr {
                     sym_span
                 ));
             }
-            let body = Expr::parse(tokens, codebase, args);
+            let body = Expr::parse_expr(tokens, codebase, args);
             return codebase.exprs.add(Expr::ArrowFunction {
                 params, body, span: tokens.span_from(start) }
             );
@@ -105,7 +105,7 @@ impl Expr {
         if tokens.peek_and_expect_symbol(Symbol::Dot, codebase) {
             let ident = tokens.expect_ident(codebase);
             if tokens.peek_and_expect_symbol(Symbol::Assign, codebase) {
-                let false_value = Expr::parse(tokens, codebase, args);
+                let false_value = Expr::parse_expr(tokens, codebase, args);
                 codebase.messages.add(Message::new_error(
                     "single-field tuple expressions may not specify a value",
                     codebase.exprs.get(false_value).span()
@@ -135,7 +135,9 @@ impl Expr {
                 }
             };
             let args = match tokens.expect_bracketed(BracketType::Parentheses, codebase) {
-                Token::Bracketed(_, mut sub_tokens, _) => Expr::parse_comma_list(&mut sub_tokens, codebase, args, Expr::parse),
+                Token::Bracketed(_, mut sub_tokens, _) => Expr::parse_comma_list(
+                    &mut sub_tokens, codebase, args, Expr::parse_expr
+                ),
                 _ => Vec::new()
             };
             return codebase.exprs.add(Expr::InvokeIntrinsic { intrinsic, args, span: tokens.span_from(start) });
@@ -179,7 +181,7 @@ impl Expr {
             let comps = value.into_iter().map(|c| match c {
                 StrLitComp::String(s) => StringComp::String(s),
                 StrLitComp::Component(mut c) => {
-                    let expr = Expr::parse(&mut c, codebase, args);
+                    let expr = Expr::parse_expr(&mut c, codebase, args);
                     c.expect_empty(codebase);
                     StringComp::Expr(expr)
                 }

@@ -1,6 +1,6 @@
 
 use crate::{
-    ast::intrinsics::Intrinsic, codebase::Codebase, pools::{exprs::ExprId, modules::Span, names::NameId}, tokens::{token::{Duration, FloatLitType, Symbol}, tokenstream::Tokens}
+    ast::intrinsics::Intrinsic, codebase::Codebase, pools::{exprs::ExprId, messages::Message, modules::Span, names::NameId}, tokens::{token::{Duration, FloatLitType, Symbol}, tokenstream::Tokens}
 };
 
 #[derive(Debug)]
@@ -249,8 +249,25 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn parse(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
+    pub fn parse_expr_or_stmt(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
+        if let Some(p) = Expr::try_parse_definition(tokens, codebase, args) {
+            return p;
+        }
         Self::parse_binop(tokens, codebase, args)
+    }
+    pub fn parse_expr(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
+        Self::parse_binop(tokens, codebase, args)
+    }
+    pub fn parse_stmt(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
+        if let Some(p) = Expr::try_parse_definition(tokens, codebase, args) {
+            return p;
+        }
+        let binop = Expr::parse_binop(tokens, codebase, args);
+        codebase.messages.add(Message::new_error(
+            "expected definition",
+            codebase.exprs.get(binop).span()
+        ).with_note("only definitions are allowed in this context", None));
+        binop
     }
     pub fn requires_semicolon(&self, codebase: &Codebase) -> bool {
         let sub_requires = |id: ExprId| {
@@ -296,49 +313,6 @@ impl Expr {
             Self::TyRef { .. } => true,
             Self::TyJoin { .. } => true,
             Self::TypeOf { .. } => true,
-        }
-    }
-    pub fn is_stmt_like(&self) -> bool {
-        match self {
-            Self::None(..) => false,
-            Self::Bool(..) => false,
-            Self::Int(..) => false,
-            Self::Float(..) => false,
-            Self::Duration(..) => false,
-            Self::String(..) => false,
-            Self::Ident(..) => false,
-            Self::DefaultValue(..) => false,
-
-            Self::Var { .. } => true,
-            Self::Function { .. } => true,
-            Self::ArrowFunction { .. } => true,
-            Self::Module { .. } => true,
-            Self::Using { .. } => true,
-            Self::TypeDef { .. } => true,
-
-            Self::CallOrTuple { .. } => false,
-            Self::InvokeIntrinsic { .. } => false,
-            Self::FieldAccess { .. } => false,
-            Self::IndexAccess { .. } => false,
-            Self::Assign { .. } => true,
-            Self::AssignFrom { .. } => true,
-            Self::LogicChain { .. } => false,
-
-            Self::If { .. } => false,
-            Self::Return(..) => false,
-            Self::Yield(..) => false,
-            Self::Block(..) => false,
-            Self::Await(..) => false,
-
-            Self::TyNamed(..) => false,
-            Self::TyAccess { .. } => false,
-            Self::TyFunction { .. } => false,
-            Self::TyArray { .. } => false,
-            Self::TyTuple { .. } => false,
-            Self::TyOptional { .. } => false,
-            Self::TyRef { .. } => false,
-            Self::TyJoin { .. } => false,
-            Self::TypeOf { .. } => false,
         }
     }
     pub fn span(&self) -> Span {
@@ -451,6 +425,8 @@ fn invalid_parses() {
     test_expr("a +");
     test_expr("function a() -> {}");
     test_expr("clip a() -> A {}");
+    test_expr("function a(a: int from) -> int {}");
+    test_expr("let a = let b = 5;");
 }
 
 #[test]
