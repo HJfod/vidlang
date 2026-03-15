@@ -1,17 +1,9 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::expr::Expr,
-    check::{ir::IrBlockId, ty::Item},
-    pools::{items::ItemId, modules::ModId},
-    codebase::Codebase,
+    check::ty::Item,
+    codebase::Codebase, pools::{items::ItemId, modules::ModId}
 };
-
-impl Expr {
-    pub fn compile(&self, codebase: &mut Codebase) -> Option<IrBlockId> {
-        todo!()
-    }
-}
 
 pub struct Checker {
     package_roots: HashMap<String, ItemId>,

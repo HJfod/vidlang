@@ -236,7 +236,7 @@ pub enum Expr {
         inner: ExprId,
         span: Span,
     },
-    /// Join two types together via `A + B` (results in a new tuple `(A, B)`)
+    /// Join two tuples together via `(A, B) + (C, D)` (results in a new tuple `(A, B, C, D)`)
     TyJoin {
         lhs: ExprId,
         rhs: ExprId,
@@ -269,6 +269,7 @@ impl Expr {
         ).with_note("only definitions are allowed in this context", None));
         binop
     }
+    
     pub fn requires_semicolon(&self, codebase: &Codebase) -> bool {
         let sub_requires = |id: ExprId| {
             codebase.exprs.get(id).requires_semicolon(codebase)
