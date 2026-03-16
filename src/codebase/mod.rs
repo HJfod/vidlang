@@ -5,7 +5,7 @@ use std::{collections::HashMap, path::{Path, PathBuf}};
 use crate::{
     ast::expr::{Ast, ParseArgs},
     codebase::config::VidToml,
-    pools::{exprs::Exprs, items::Items, messages::Messages, modules::{ModId, AddModuleError, Modules, Span, SrcIterator}, names::Names},
+    pools::{exprs::Exprs, items::{ItemId, Items}, messages::Messages, modules::{AddModuleError, ModId, Modules, Span, SrcIterator}, names::Names},
     tokens::{token::Token, tokenstream::Tokens}
 };
 
@@ -25,6 +25,7 @@ pub struct Codebase {
     pub exprs: Exprs,
     pub items: Items,
     pub parsed_asts: HashMap<ModId, Ast>,
+    pub root_items: HashMap<ModId, ItemId>,
 }
 
 #[derive(Debug)]
@@ -45,7 +46,8 @@ impl Codebase {
             messages: Messages::new(),
             exprs: Exprs::new(),
             items: Items::new(),
-            parsed_asts: HashMap::new()
+            parsed_asts: HashMap::new(),
+            root_items: HashMap::new(),
         }
     }
     #[cfg(test)]

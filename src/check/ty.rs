@@ -1,8 +1,6 @@
-use std::{collections::HashMap, fmt::Display};
-
+use std::collections::HashMap;
 use crate::{
     ast::expr::{Expr, StringComp},
-    check::checker::Checker,
     codebase::Codebase,
     pools::{exprs::ExprId, items::ItemId, messages::Message, modules::ModId, names::NameId}
 };
@@ -37,6 +35,9 @@ pub enum Ty {
     Undecided,
     /// Type produced by non-exhaustive constructs (i.e. value is never assignable)
     NonExhaustive(Box<Ty>, ExprId),
+    /// Type produced by the `default` keyword, which assigns the default value 
+    /// of the provided type
+    AssignDefault,
 }
 
 impl Ty {
@@ -51,7 +52,11 @@ impl Ty {
             Self::Function(p, r) => format!("{} -> {}", p.name(codebase), r.name(codebase)),
             Self::Alias { name, of, is_newtype } => match is_newtype {
                 true => codebase.names.get(*name).to_string(),
-                false => format!("{} ({})", codebase.names.get(*name), of.reduce().name(codebase)),
+                false => format!(
+                    "{} ({})",
+                    codebase.names.get(*name),
+                    of.reduce(codebase).name(codebase)
+                ),
             }
             Self::Optional(ty) => format!("{}?", ty.name(codebase)),
             Self::Ref(ty) => format!("ref {}", ty.name(codebase)),
@@ -77,25 +82,41 @@ impl Ty {
             ),
             Self::Undecided => String::from("<unknown>"),
             Self::NonExhaustive(ty, _) => format!("<non-exhaustive {}>", ty.name(codebase)),
+            Self::AssignDefault => String::from("<default>"),
         }
     }
 
-    pub fn reduce(&self) -> Ty {
+    pub fn reduce(&self, codebase: &Codebase) -> Ty {
         match self {
-            Self::Alias { name: _, of, is_newtype } => match is_newtype {
-                true => self.clone(),
-                false => *of.clone(),
+            Self::Alias { name: _, of, is_newtype } if !*is_newtype => *of.clone(),
+            // `(T) == T`
+            Self::Tuple(fields) if let [TupleFieldTy::Field(name, ty, false)] = &fields[..] => {
+                if codebase.names.get(*name) == "0" {
+                    return ty.clone();
+                }
+                self.clone()
             },
             _ => self.clone(),
         }
     }
 
-    pub fn convert_to(&self, into: &Ty, codebase: &mut Codebase) -> Ty {
+    pub fn convert_to(
+        &self,
+        into: &Ty,
+        phase: CheckPhase,
+        codebase: &mut Codebase,
+        disregard_tuple_names: bool,
+    ) -> Ty {
+        if phase == CheckPhase::Discovery {
+            return into.clone();
+        }
+        let from = self.reduce(codebase);
+        let into = into.reduce(codebase);
         // `let a = if { .. }`
-        if let Ty::NonExhaustive(ty, e) = self {
+        if let Ty::NonExhaustive(ty, e) = from {
             codebase.messages.add(Message::new_error(
                 format!("cannot convert {} to {}", ty.name(codebase), into.name(codebase)),
-                codebase.exprs.get(*e).span()
+                codebase.exprs.get(e).span()
             ));
             return into.clone();
         }
@@ -103,17 +124,25 @@ impl Ty {
         if let Ty::NonExhaustive(ty, e) = into {
             codebase.messages.add(Message::new_error(
                 "non-exhaustive constructs can not be assigned to",
-                codebase.exprs.get(*e).span()
+                codebase.exprs.get(e).span()
             ));
             return *ty.clone();
         }
-        // If these are the exact same type then just return the type we're converting into
-        if self == into {
+        // If these are the exact same type then the conversion is always fine
+        if from == into {
             return into.clone();
         }
         match (self, into) {
+            (Ty::Function(fp, fr), Ty::Function(ip, ir)) => {
+
+            }
         }
     }
+}
+
+#[derive(Debug)]
+pub enum ScopeKind {
+    Function,
 }
 
 #[derive(Debug)]
@@ -122,6 +151,12 @@ pub enum Item {
     Module {
         name: NameId,
         definition: ModId,
+        items: HashMap<NameId, ItemId>,
+    },
+    Scope {
+        kind: ScopeKind,
+        name: Option<NameId>,
+        definition: ExprId,
         items: HashMap<NameId, ItemId>,
     },
 }
@@ -135,22 +170,55 @@ impl Item {
     }
 }
 
-impl Expr {
-    pub fn check(&self, checker: &mut Checker, codebase: &mut Codebase) -> Ty {
-        match self {
-            Self::None(..) => Ty::Optional(Box::from(Ty::Undecided)),
-            Self::Bool(..) => Ty::Bool,
-            Self::Int(..) => Ty::Int,
-            Self::Float(..) => Ty::Float,
-            Self::Duration(..) => Ty::Duration,
-            Self::String(comps, _) => {
-                comps.iter().for_each(|c| match c {
-                    StringComp::String(_) => {},
-                    StringComp::Expr(e) => {
-                        codebase.exprs.get(*e).check(checker, codebase)
-                    }
-                });
-                Ty::String
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum NameHint {
+    Function,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CheckPhase {
+    /// Find item names
+    Discovery,
+    /// Check types
+    Check {
+        name_hint: Option<NameHint>,
+    },
+}
+
+pub fn check_expr(expr: ExprId, phase: CheckPhase, codebase: &mut Codebase) -> Ty {
+    match codebase.exprs.get(expr) {
+        Expr::None(..) => Ty::Optional(Box::from(Ty::Undecided)),
+        Expr::Bool(..) => Ty::Bool,
+        Expr::Int(..) => Ty::Int,
+        Expr::Float(..) => Ty::Float,
+        Expr::Duration(..) => Ty::Duration,
+        Expr::String(comps, _) => {
+            comps.iter().for_each(|c| match c {
+                StringComp::String(_) => {},
+                StringComp::Expr(e) => {
+                    codebase.exprs.get(*e)
+                        .check(phase, codebase)
+                        .convert_to(&Ty::String, phase, codebase, false);
+                }
+            });
+            Ty::String
+        }
+        Expr::Ident(path) => match phase {
+            CheckPhase::Discovery => Ty::Undecided,
+            CheckPhase::Check => todo!(),
+        }
+        Expr::DefaultValue(_) => Ty::Undecided,
+
+        Expr::Var { visibility, name, ty, value, is_const, span } => match phase {
+            CheckPhase::Discovery => {
+                if !*is_const {
+                    return Ty::Undecided;
+                }
+                let decl_ty = ty.map(|t| codebase.exprs.get(t).check(phase, codebase));
+                todo!()
+            }
+            CheckPhase::Check => {
+                todo!()
             }
         }
     }
