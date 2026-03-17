@@ -3,9 +3,9 @@ pub mod config;
 use std::{collections::HashMap, path::{Path, PathBuf}};
 
 use crate::{
-    ast::expr::{Ast, ParseArgs},
+    ast::expr::{Expr, ParseArgs},
     codebase::config::VidToml,
-    pools::{exprs::Exprs, items::{ItemId, Items}, messages::Messages, modules::{AddModuleError, ModId, Modules, Span, SrcIterator}, names::Names},
+    pools::{exprs::{ExprId, Exprs}, items::{ItemId, Items}, messages::Messages, modules::{AddModuleError, ModId, Modules, Span, SrcIterator}, names::Names},
     tokens::{token::Token, tokenstream::Tokens}
 };
 
@@ -24,7 +24,7 @@ pub struct Codebase {
     pub messages: Messages,
     pub exprs: Exprs,
     pub items: Items,
-    pub parsed_asts: HashMap<ModId, Ast>,
+    pub parsed_asts: HashMap<ModId, ExprId>,
     pub root_items: HashMap<ModId, ItemId>,
 }
 
@@ -103,15 +103,15 @@ impl Codebase {
         }
         Some(Tokens::new(tokens, "eof", Span::zero(mod_id)))
     }
-    pub fn parse_one(&mut self, id: ModId, args: ParseArgs) -> Option<&Ast> {
+    pub fn parse_one(&mut self, id: ModId, args: ParseArgs) -> Option<ExprId> {
         // Having to re-get this is silly but I ran into borrow checker issues
         if self.parsed_asts.contains_key(&id) {
-            return self.parsed_asts.get(&id);
+            return self.parsed_asts.get(&id).copied();
         }
         let mut tokens = self.tokenize_mod(id)?;
-        let parsed = Ast::parse(&mut tokens, self, args);
+        let parsed = Expr::parse_ast(id, &mut tokens, self, args);
         self.parsed_asts.insert(id, parsed);
-        self.parsed_asts.get(&id)
+        self.parsed_asts.get(&id).copied()
     }
     pub fn parse_all(&mut self, args: ParseArgs) {
         for id in self.modules.all_ids() {

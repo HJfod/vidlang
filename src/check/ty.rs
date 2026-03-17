@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use crate::{
-    ast::expr::{Expr, StringComp},
-    codebase::Codebase,
-    pools::{exprs::ExprId, items::ItemId, messages::Message, modules::{ModId, Span}, names::NameId}
+    ast::expr::{Expr, StringComp}, check::checker::{CheckPhase, Checker}, codebase::Codebase, pools::{exprs::ExprId, items::ItemId, messages::Message, modules::ModId, names::NameId}
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,7 +101,6 @@ impl Ty {
     pub fn convert_to(
         &self,
         into: &Ty,
-        span: Span,
         codebase: &Codebase,
     ) -> Result<Ty, String> {
         let from = self.reduce(codebase);
@@ -126,8 +123,8 @@ impl Ty {
             // example: `int -> byte` can be passed to `byte -> int` because 
             // `byte -> int` is always valid
             (Ty::Function(fp, fr), Ty::Function(ip, ir)) => {
-                let np = ip.convert_to(&fp, span, codebase)?;
-                let nr = fr.convert_to(&ir, span, codebase)?;
+                let np = ip.convert_to(&fp, codebase)?;
+                let nr = fr.convert_to(&ir, codebase)?;
                 Ok(Ty::Function(Box::from(np), Box::from(nr)))
             }
             // Otherwise if we're here, the conversion is invalid
@@ -139,91 +136,88 @@ impl Ty {
 }
 
 #[derive(Debug)]
-pub enum ScopeKind {
-    Function,
-}
-
-#[derive(Debug)]
 pub enum Item {
-    Constant(NameId, ExprId, Ty),
+    Constant {
+        name: NameId,
+        definition: ExprId,
+        ty: Ty,
+    },
     Module {
         name: NameId,
         definition: ModId,
         items: HashMap<NameId, ItemId>,
     },
-    Scope {
-        kind: ScopeKind,
-        name: Option<NameId>,
+    Function {
+        name: NameId,
         definition: ExprId,
         items: HashMap<NameId, ItemId>,
+        variables: Vec<(NameId, ExprId, Ty)>,
+    },
+    BlockScope {
+        definition: ExprId,
+        items: HashMap<NameId, ItemId>,
+        variables: Vec<(NameId, ExprId, Ty)>,
     },
 }
 
 impl Item {
     pub fn get_subitems(&self) -> Vec<ItemId> {
         match self {
-            Item::Constant(..) => vec![],
+            Item::Constant { .. } => vec![],
             Item::Module { items, .. } => items.values().copied().collect(),
-            Item::Scope { items, .. } => items.values().copied().collect(),
+            Item::BlockScope { items, .. } => items.values().copied().collect(),
+            Item::Function { items, .. } => items.values().copied().collect(),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum NameHint {
-    Function,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum CheckPhase {
-    /// Find item names
-    Discovery,
-    /// Check types
-    Check {
-        name_hint: Option<NameHint>,
-    },
-}
-
-pub fn check_expr(expr: ExprId, phase: CheckPhase, codebase: &mut Codebase) -> Ty {
-    match codebase.exprs.get(expr) {
-        Expr::None(..) => Ty::Optional(Box::from(Ty::Undecided)),
-        Expr::Bool(..) => Ty::Bool,
-        Expr::Int(..) => Ty::Int,
-        Expr::Float(..) => Ty::Float,
-        Expr::Duration(..) => Ty::Duration,
-        Expr::String(comps, _) => {
-            // Oh the silly things that lifetimes make me do
-            let comp_ids = comps.iter().filter_map(|c| match c {
-                StringComp::String(_) => None,
-                StringComp::Expr(e) => Some(*e),
-            }).collect::<Vec<_>>();
-            for id in comp_ids {
-                let check = check_expr(id, phase, codebase);
-                if phase == CheckPhase::Discovery {
-                    continue;
+impl Checker {
+    pub fn check(&mut self, expr: ExprId, codebase: &mut Codebase) -> Ty {
+        match codebase.exprs.get(expr) {
+            Expr::None(..) => Ty::Optional(Box::from(Ty::Undecided)),
+            Expr::Bool(..) => Ty::Bool,
+            Expr::Int(..) => Ty::Int,
+            Expr::Float(..) => Ty::Float,
+            Expr::Duration(..) => Ty::Duration,
+            Expr::String(comps, _) => {
+                // Oh the silly things that lifetimes make me do
+                let comp_ids = comps.iter().filter_map(|c| match c {
+                    StringComp::String(_) => None,
+                    StringComp::Expr(e) => Some(*e),
+                }).collect::<Vec<_>>();
+                for id in comp_ids {
+                    let check = self.check(id, codebase);
+                    if self.discovering() {
+                        continue;
+                    }
+                    if let Err(e) = check.convert_to(&Ty::String, codebase) {
+                        codebase.messages.add(Message::new_error(
+                            "component in string interpolation is not convertible to string",
+                            codebase.exprs.get(expr).span()
+                        ).with_note(e, None));
+                    }
                 }
-                check.convert_to(&Ty::String, codebase.exprs.get(id).span(), codebase);
+                Ty::String
             }
-            Ty::String
-        }
-        Expr::Ident(path) => match phase {
-            CheckPhase::Discovery => Ty::Undecided,
-            CheckPhase::Check { .. } => todo!(),
-        }
-        Expr::DefaultValue(_) => Ty::Undecided,
+            Expr::Ident(path) => match self.phase() {
+                CheckPhase::Discovery => Ty::Undecided,
+                CheckPhase::Check { .. } => todo!(),
+            }
+            Expr::DefaultValue(_) => Ty::Undecided,
 
-        Expr::Var { visibility, name, ty, value, is_const, span } => match phase {
-            CheckPhase::Discovery => {
-                if !*is_const {
-                    return Ty::Undecided;
+            Expr::Var { visibility, name, ty, value, is_const, span } => match self.phase() {
+                CheckPhase::Discovery => {
+                    if !*is_const {
+                        return Ty::Undecided;
+                    }
+                    let decl_ty = ty.map(|t| self.check(t, codebase));
+                    todo!()
                 }
-                let decl_ty = ty.map(|t| check_expr(t, phase, codebase));
-                todo!()
+                CheckPhase::Check { .. } => {
+                    todo!()
+                }
             }
-            CheckPhase::Check { .. } => {
-                todo!()
-            }
+            _ => todo!()
         }
-        _ => todo!()
     }
 }

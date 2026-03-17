@@ -1,6 +1,6 @@
 
 use crate::{
-    ast::intrinsics::Intrinsic, codebase::Codebase, pools::{exprs::ExprId, messages::Message, modules::Span, names::NameId}, tokens::{token::{Duration, FloatLitType, Symbol}, tokenstream::Tokens}
+    ast::intrinsics::Intrinsic, codebase::Codebase, pools::{exprs::ExprId, messages::Message, modules::{ModId, Span}, names::NameId}, tokens::{token::{Duration, FloatLitType, Symbol}, tokenstream::Tokens}
 };
 
 #[derive(Debug)]
@@ -246,30 +246,15 @@ pub enum Expr {
         eval: ExprId,
         span: Span,
     },
+
+    Ast {
+        exprs: Vec<ExprId>,
+        of: ModId,
+        span: Span,
+    }
 }
 
 impl Expr {
-    pub fn parse_expr_or_stmt(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
-        if let Some(p) = Expr::try_parse_definition(tokens, codebase, args) {
-            return p;
-        }
-        Self::parse_binop(tokens, codebase, args)
-    }
-    pub fn parse_expr(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
-        Self::parse_binop(tokens, codebase, args)
-    }
-    pub fn parse_stmt(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
-        if let Some(p) = Expr::try_parse_definition(tokens, codebase, args) {
-            return p;
-        }
-        let binop = Expr::parse_binop(tokens, codebase, args);
-        codebase.messages.add(Message::new_error(
-            "expected definition",
-            codebase.exprs.get(binop).span()
-        ).with_note("only definitions are allowed in this context", None));
-        binop
-    }
-    
     pub fn requires_semicolon(&self, codebase: &Codebase) -> bool {
         let sub_requires = |id: ExprId| {
             codebase.exprs.get(id).requires_semicolon(codebase)
@@ -314,6 +299,8 @@ impl Expr {
             Self::TyRef { .. } => true,
             Self::TyJoin { .. } => true,
             Self::TypeOf { .. } => true,
+
+            Self::Ast { .. } => true,
         }
     }
     pub fn span(&self) -> Span {
@@ -353,6 +340,7 @@ impl Expr {
             Self::TyRef { span, .. } => *span,
             Self::TyJoin { span, .. } => *span,
             Self::TypeOf { span, .. } => *span,
+            Self::Ast { span, .. } => *span,
         }
     }
     #[cfg(test)]
@@ -378,10 +366,29 @@ impl Default for ParseArgs {
     }
 }
 
-#[derive(Debug)]
-pub struct Ast(Vec<ExprId>);
-impl Ast {
-    pub fn parse(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> Ast {
+impl Expr {
+    pub fn parse_expr_or_stmt(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
+        if let Some(p) = Expr::try_parse_definition(tokens, codebase, args) {
+            return p;
+        }
+        Self::parse_binop(tokens, codebase, args)
+    }
+    pub fn parse_expr(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
+        Self::parse_binop(tokens, codebase, args)
+    }
+    pub fn parse_stmt(tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
+        if let Some(p) = Expr::try_parse_definition(tokens, codebase, args) {
+            return p;
+        }
+        let binop = Expr::parse_binop(tokens, codebase, args);
+        codebase.messages.add(Message::new_error(
+            "expected definition",
+            codebase.exprs.get(binop).span()
+        ).with_note("only definitions are allowed in this context", None));
+        binop
+    }
+    
+    pub fn parse_ast(of: ModId, tokens: &mut Tokens, codebase: &mut Codebase, args: ParseArgs) -> ExprId {
         let first_span = tokens.last_span();
         let mut exprs = Expr::parse_semicolon_expr_list(tokens, codebase, !args.allow_non_definitions_at_root, args);
         
@@ -398,10 +405,7 @@ impl Ast {
                 span: first_span,
             }));
         }
-        Ast(exprs)
-    }
-    pub fn exprs(&self) -> &[ExprId] {
-        &self.0
+        codebase.exprs.add(Expr::Ast { exprs, of, span: tokens.span_from(first_span.start()) })
     }
 }
 
@@ -498,7 +502,9 @@ fn parse() {
         }.add_into(&mut codebase)
     ];
 
-    let ast_exprs = &codebase.parsed_asts.get(&id).unwrap().0;
+    let Expr::Ast { exprs: ast_exprs, .. } = codebase.exprs.get(*codebase.parsed_asts.get(&id).unwrap()) else {
+        unreachable!();
+    };
     assert_eq!(ast_exprs.len(), 2);
     ast_exprs.debug_ast_assert_eq(&eq_ast, &codebase);
 }

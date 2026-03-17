@@ -416,10 +416,10 @@ fn binop() {
         &mut codebase,
     );
 
-    let ast = codebase.parsed_asts.get(&id).unwrap().exprs();
+    let compare_against = Vec::from([codebase.exprs.add(Expr::Yield(binop_tree, Span::zero(id)))]);
+    let Expr::Ast { exprs: ast, .. } = codebase.exprs.get(*codebase.parsed_asts.get(&id).unwrap()) else {
+        unreachable!();
+    };
     assert_eq!(ast.len(), 1, "ast: {ast:?}");
-    ast.debug_ast_assert_eq(
-        &[codebase.exprs.add(Expr::Yield(binop_tree, Span::zero(id)))],
-        &codebase
-    );
+    ast.debug_ast_assert_eq(&compare_against, &codebase);
 }

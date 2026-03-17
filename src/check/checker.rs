@@ -2,55 +2,80 @@ use std::collections::HashMap;
 
 use crate::{
     check::ty::Item,
-    codebase::Codebase, pools::{items::ItemId, modules::ModId}
+    codebase::Codebase,
+    pools::{items::{ItemId, Items}, modules::{ModId, Modules}, names::Names}
 };
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum NameHint {
+    // This is probably the name of a variable
+    Variable,
+    // This is probably the name of a function
+    Function,
+    // This is probably the name of a module
+    Module,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CheckPhase {
+    /// Find item names
+    Discovery,
+    /// Check types
+    Check {
+        name_hint: Option<NameHint>,
+    },
+}
+
+#[derive(Debug)]
 pub struct Checker {
-    package_roots: HashMap<String, ItemId>,
+    check_phase: CheckPhase,
+    current_item: ItemId,
 }
 
 impl Checker {
-    pub fn new(codebase: &mut Codebase) -> Self {
-        let pkgs = codebase.packages.iter()
-                // Because we can't have multiple borrows into Codebase...
-                .map(|p| (p.0.to_owned(), p.1.root_id))
-                .collect::<Vec<_>>().into_iter();
-        Self {
-            package_roots: pkgs
-                .map(|p| (p.0.clone(), Self::make_submodule(codebase, &p.0, p.1)))
-                .collect(),
-        }
-    }
-    fn make_submodule(codebase: &mut Codebase, name: &str, id: ModId) -> ItemId {
+    fn init_modules(items: &mut Items, names: &mut Names, modules: &Modules, name: &str, id: ModId) -> ItemId {
         let mut result = HashMap::new();
-        for (name, sub) in codebase.modules.get_submodules_for(id)
-            // Because we can't have multiple borrows into Codebase...
-            .map(|p| (p.0.to_owned(), p.1))
-            .collect::<Vec<_>>().into_iter()
-        {
+        for (name, sub) in modules.get_submodules_for(id) {
             result.insert(
-                codebase.names.add(&name),
-                Self::make_submodule(codebase, &name, sub)
+                names.add(&name),
+                Self::init_modules(items, names, modules, &name, sub)
             );
         }
-        codebase.items.add(Item::Module {
-            name: codebase.names.add(name),
+        items.add(Item::Module {
+            name: names.add(name),
             definition: id,
             items: result,
         })
     }
-
-    fn initial_discover(&mut self, item: ItemId, codebase: &mut Codebase) {
-        // Recursively check all subitems too
-        let items = codebase.items.get(item).get_subitems();
-        for id in items {
-            self.initial_discover(id, codebase);
+    pub fn init_items(codebase: &mut Codebase) {
+        for (name, pkg) in &codebase.packages {
+            // Skip packages that have already been added (in case `init_items` 
+            // is called multiple times)
+            if codebase.root_items.contains_key(&pkg.root_id) {
+                continue;
+            }
+            let root = Self::init_modules(
+                &mut codebase.items,
+                &mut codebase.names,
+                &codebase.modules,
+                name, pkg.root_id
+            );
+            codebase.root_items.insert(pkg.root_id, root);
         }
     }
-    pub fn run_initial_discovery(&mut self, codebase: &mut Codebase) {
-        for root in self.package_roots.values().copied().collect::<Vec<_>>() {
-            self.initial_discover(root, codebase);
+
+    pub fn new(root_item: ItemId) -> Checker {
+        Self {
+            check_phase: CheckPhase::Discovery,
+            current_item: root_item,
         }
+    }
+
+    pub fn discovering(&self) -> bool {
+        matches!(self.check_phase, CheckPhase::Discovery)
+    }
+    pub fn phase(&self) -> &CheckPhase {
+        &self.check_phase
     }
 }
 
@@ -72,8 +97,12 @@ fn type_checker() {
         "messages was not empty after parsing:\n{}", codebase.messages.to_test_string(&codebase)
     );
 
-    let mut checker = Checker::new(&mut codebase);
-    checker.run_initial_discovery(&mut codebase);
+    Checker::init_items(&mut codebase);
+    for pkg_root_id in &codebase.packages.iter().map(|p| p.1.root_id).collect::<Vec<_>>() {
+        let root = codebase.root_items.get(pkg_root_id).unwrap();
+        let mut checker = Checker::new(*root);
+        checker.check(*codebase.parsed_asts.get(pkg_root_id).unwrap(), &mut codebase);
+    }
 
     assert_eq!(
         codebase.messages.count_total(), 0,
