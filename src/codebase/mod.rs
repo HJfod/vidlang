@@ -1,5 +1,6 @@
 pub mod config;
 
+use core::range::Range;
 use std::{collections::HashMap, path::{Path, PathBuf}};
 
 use crate::{
@@ -11,12 +12,14 @@ use crate::{
 
 /// Packages are the root unit of codebases. Each project and library is 
 /// one package with a root module, which may contain any number of submodules
+#[derive(Debug)]
 pub struct Package {
     pub path: PathBuf,
     pub config: VidToml,
     pub root_id: ModId,
 }
 
+#[derive(Debug)]
 pub struct Codebase {
     pub packages: HashMap<String, Package>,
     pub modules: Modules,
@@ -117,6 +120,10 @@ impl Codebase {
         for id in self.modules.all_ids() {
             self.parse_one(id, args);
         }
+    }
+
+    pub fn full_span_for(&self, id: ModId) -> Span {
+        Span::full(id, self.modules.get(id).data.as_ref().unwrap_or(&String::new()).len())
     }
 }
 

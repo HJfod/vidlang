@@ -18,4 +18,7 @@ impl Items {
     pub fn get(&self, item: ItemId) -> &Item {
         self.map.get(item).expect("Items has apparently handed out an invalid ItemId")
     }
+    pub fn get_mut(&mut self, item: ItemId) -> &mut Item {
+        self.map.get_mut(item).expect("Items has apparently handed out an invalid ItemId")
+    }
 }

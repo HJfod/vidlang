@@ -9,7 +9,7 @@ pub enum StringComp {
     Expr(ExprId),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Ident(pub NameId, pub Span);
 
 #[derive(Debug)]
@@ -45,7 +45,7 @@ pub enum LogicChainType {
     Or,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum FunctionParamKind {
     /// Ordinary function param that is passed by ownership / copy
     Normal,
@@ -63,13 +63,13 @@ pub struct FunctionParam {
     pub from: Vec<Ident>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Visibility {
     Public,
     Private,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum FunctionType {
     Function,
     Effect,

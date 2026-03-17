@@ -6,11 +6,13 @@ use crate::utils::lookahead_iter::Looakhead;
 
 new_key_type! { pub struct ModId; }
 
+#[derive(Debug)]
 pub enum SrcModuleParent {
     Module(ModId),
     Package(String),
 }
 
+#[derive(Debug)]
 pub struct SrcModule {
     pub path: PathBuf,
     pub data: Option<String>,
@@ -18,6 +20,7 @@ pub struct SrcModule {
     pub submodules: HashMap<String, ModId>,
 }
 
+#[derive(Debug)]
 pub struct Modules {
     pool: SlotMap<ModId, SrcModule>,
 }
@@ -210,6 +213,9 @@ impl<'s> Iterator for SrcIterator<'s> {
 pub struct Span(ModId, Range<usize>);
 
 impl Span {
+    pub fn full(id: ModId, len: usize) -> Self {
+        Self(id, (0..len).into())
+    }
     pub fn zero(id: ModId) -> Self {
         Self(id, (0..0).into())
     }

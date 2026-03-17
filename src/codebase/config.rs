@@ -9,7 +9,7 @@ fn default_aspect_ratio() -> String {
 /// Defines that this Vid module is a project, aka a video itself. If you 
 /// intend to create reusable components for other videos, use the `package` 
 /// key instead
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct DefProject {
     /// Project name. Must be a valid identifier, like `my_awesome_video`
     pub name: String,
@@ -22,7 +22,7 @@ pub struct DefProject {
 /// Defines that this Vid module is a package aka library. In other words, it 
 /// is not a full video itself, but instead features reusable components for 
 /// making other videos
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct DefPackage {
     /// Package name. Must be a valid identifier, like `std` or `my_video_tools`
     pub name: String,
@@ -36,14 +36,14 @@ pub struct DefPackage {
     pub repository: Option<String>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum VidType {
     project(DefProject),
     package(DefPackage),
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VidToml {
     #[serde(flatten)]
