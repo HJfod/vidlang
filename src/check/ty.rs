@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use crate::{
     ast::expr::{Expr, StringComp},
     codebase::Codebase,
-    pools::{exprs::ExprId, items::ItemId, messages::Message, modules::ModId, names::NameId}
+    pools::{exprs::ExprId, items::ItemId, messages::Message, modules::{ModId, Span}, names::NameId}
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,38 +103,36 @@ impl Ty {
     pub fn convert_to(
         &self,
         into: &Ty,
-        phase: CheckPhase,
-        codebase: &mut Codebase,
-        disregard_tuple_names: bool,
-    ) -> Ty {
-        if phase == CheckPhase::Discovery {
-            return into.clone();
-        }
+        span: Span,
+        codebase: &Codebase,
+    ) -> Result<Ty, String> {
         let from = self.reduce(codebase);
         let into = into.reduce(codebase);
+
         // `let a = if { .. }`
-        if let Ty::NonExhaustive(ty, e) = from {
-            codebase.messages.add(Message::new_error(
-                format!("cannot convert {} to {}", ty.name(codebase), into.name(codebase)),
-                codebase.exprs.get(e).span()
+        if matches!(from, Ty::NonExhaustive(..)) || matches!(into, Ty::NonExhaustive(..)) {
+            return Err(String::from(
+                "non-exhaustive constructs (such as those produced by if \
+                statements without an else branch) can not be assigned"
             ));
-            return into.clone();
         }
-        // `if { .. } = a`
-        if let Ty::NonExhaustive(ty, e) = into {
-            codebase.messages.add(Message::new_error(
-                "non-exhaustive constructs can not be assigned to",
-                codebase.exprs.get(e).span()
-            ));
-            return *ty.clone();
-        }
+
         // If these are the exact same type then the conversion is always fine
         if from == into {
-            return into.clone();
+            return Ok(into.clone());
         }
-        match (self, into) {
+        match (from, into) {
+            // `A -> B` is convertible to `C -> D` iff `C -> A` and `B -> D`
+            // example: `int -> byte` can be passed to `byte -> int` because 
+            // `byte -> int` is always valid
             (Ty::Function(fp, fr), Ty::Function(ip, ir)) => {
-
+                let np = ip.convert_to(&fp, span, codebase)?;
+                let nr = fr.convert_to(&ir, span, codebase)?;
+                Ok(Ty::Function(Box::from(np), Box::from(nr)))
+            }
+            // Otherwise if we're here, the conversion is invalid
+            (from, into) => {
+                Err(format!("cannot convert from {} to {}", from.name(codebase), into.name(codebase)))
             }
         }
     }
@@ -166,6 +164,7 @@ impl Item {
         match self {
             Item::Constant(..) => vec![],
             Item::Module { items, .. } => items.values().copied().collect(),
+            Item::Scope { items, .. } => items.values().copied().collect(),
         }
     }
 }
@@ -193,19 +192,23 @@ pub fn check_expr(expr: ExprId, phase: CheckPhase, codebase: &mut Codebase) -> T
         Expr::Float(..) => Ty::Float,
         Expr::Duration(..) => Ty::Duration,
         Expr::String(comps, _) => {
-            comps.iter().for_each(|c| match c {
-                StringComp::String(_) => {},
-                StringComp::Expr(e) => {
-                    codebase.exprs.get(*e)
-                        .check(phase, codebase)
-                        .convert_to(&Ty::String, phase, codebase, false);
+            // Oh the silly things that lifetimes make me do
+            let comp_ids = comps.iter().filter_map(|c| match c {
+                StringComp::String(_) => None,
+                StringComp::Expr(e) => Some(*e),
+            }).collect::<Vec<_>>();
+            for id in comp_ids {
+                let check = check_expr(id, phase, codebase);
+                if phase == CheckPhase::Discovery {
+                    continue;
                 }
-            });
+                check.convert_to(&Ty::String, codebase.exprs.get(id).span(), codebase);
+            }
             Ty::String
         }
         Expr::Ident(path) => match phase {
             CheckPhase::Discovery => Ty::Undecided,
-            CheckPhase::Check => todo!(),
+            CheckPhase::Check { .. } => todo!(),
         }
         Expr::DefaultValue(_) => Ty::Undecided,
 
@@ -214,12 +217,13 @@ pub fn check_expr(expr: ExprId, phase: CheckPhase, codebase: &mut Codebase) -> T
                 if !*is_const {
                     return Ty::Undecided;
                 }
-                let decl_ty = ty.map(|t| codebase.exprs.get(t).check(phase, codebase));
+                let decl_ty = ty.map(|t| check_expr(t, phase, codebase));
                 todo!()
             }
-            CheckPhase::Check => {
+            CheckPhase::Check { .. } => {
                 todo!()
             }
         }
+        _ => todo!()
     }
 }
